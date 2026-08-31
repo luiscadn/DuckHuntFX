@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.image.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.paint.*?>
+<?import javafx.scene.text.*?>
+
+<AnchorPane fx:id="gamePane" maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="600.0" prefWidth="800.0" xmlns="http://javafx.com/javafx/17.0.2-ea" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.luiscadn.duckhunt.controller.GameController">
+    <!-- Imagen de fondo del paisaje (arboles y pasto) -->
+    <ImageView fitHeight="800.0" fitWidth="800.0" pickOnBounds="true" preserveRatio="true">
+        <image>
+            <Image url="@paisaje2.jpg" />
+        </image>
+    </ImageView>
+    <ImageView fx:id="background" fitHeight="800.0" fitWidth="800.0" pickOnBounds="true" preserveRatio="true">
+        <image>
+            <Image url="@paisaje2.jpg" />
+        </image>
+    </ImageView>
+    <Label fx:id="scoreLabel" layoutX="350.0" layoutY="9.0" text="Score: 0">
+      <font>
+         <Font name="Avenir Heavy" size="26.0" />
+      </font>
+      <textFill>
+         <RadialGradient centerX="0.4833333333333333" centerY="0.49047619047619045" focusAngle="-163.3" focusDistance="0.20930232558139528" radius="0.9767441860465116">
+            <stops>
+               <Stop>
+                  <color>
+                     <Color red="0.8726114630699158" green="1.0" />
+                  </color>
+               </Stop>
+               <Stop offset="0.006711409395973154">
+                  <color>
+                     <Color red="0.8726114630699158" green="1.0" />
+                  </color>
+               </Stop>
+               <Stop offset="1.0">
+                  <color>
+                     <Color red="0.03184713423252106" green="1.0" />
+                  </color>
+               </Stop>
+            </stops>
+         </RadialGradient>
+      </textFill></Label>
+    <Label fx:id="ammoLabel" layoutX="689.0" layoutY="14.0" style="-fx-font-size: 24; -fx-text-fill: white;" text="Bullets: 5">
+      <textFill>
+         <LinearGradient endX="1.0" endY="1.0">
+            <stops>
+               <Stop>
+                  <color>
+                     <Color red="0.8726114630699158" green="1.0" />
+                  </color>
+               </Stop>
+               <Stop offset="0.006711409395973154">
+                  <color>
+                     <Color red="0.8726114630699158" green="1.0" />
+                  </color>
+               </Stop>
+               <Stop offset="1.0">
+                  <color>
+                     <Color red="0.800000011920929" green="1.0" />
+                  </color>
+               </Stop>
+            </stops>
+         </LinearGradient>
+      </textFill>
+      <font>
+         <Font name="Avenir Next Condensed Demi Bold" size="19.0" />
+      </font></Label>
+    <ImageView fx:id="heart1" fitHeight="30.0" fitWidth="30.0" layoutX="10.0" layoutY="10.0">
+        <image>
+            <Image url="@heart.png" />
+        </image>
+    </ImageView>
+    <ImageView fx:id="heart2" fitHeight="30.0" fitWidth="30.0" layoutX="50.0" layoutY="10.0">
+        <image>
+            <Image url="@heart.png" />
+        </image>
+    </ImageView>
+    <ImageView fx:id="heart3" fitHeight="30.0" fitWidth="30.0" layoutX="90.0" layoutY="10.0">
+        <image>
+            <Image url="@heart.png" />
+        </image>
+    </ImageView>
+    <ImageView fx:id="weapon" fitHeight="495.0" fitWidth="619.0" layoutX="316.0" layoutY="305.0">
+        <image>
+            <Image url="@arma.png" />
+        </image>
+    </ImageView>
+    <!-- Munición -->
+    <ImageView fx:id="bullet1" fitHeight="30.0" fitWidth="10.0" layoutX="690.0" layoutY="50.0">
+        <image>
+            <Image url="@bullet.png" />
+        </image>
+    </ImageView>
+    <ImageView fx:id="bullet2" fitHeight="30.0" fitWidth="10.0" layoutX="710.0" layoutY="50.0">
+        <image>
+            <Image url="@bullet.png" />
+        </image>
+    </ImageView>
+    <ImageView fx:id="bullet3" fitHeight="30.0" fitWidth="10.0" layoutX="730.0" layoutY="50.0">
+        <image>
+            <Image url="@bullet.png" />
+        </image>
+    </ImageView>
+    <ImageView fx:id="bullet4" fitHeight="30.0" fitWidth="10.0" layoutX="750.0" layoutY="50.0">
+        <image>
+            <Image url="@bullet.png" />
+        </image>
+    </ImageView>
+    <ImageView fx:id="bullet5" fitHeight="30.0" fitWidth="10.0" layoutX="770.0" layoutY="50.0">
+        <image>
+            <Image url="@bullet.png" />
+        </image>
+    </ImageView>
+    <Button fx:id="freezeTimeButton" text="Freeze Time" layoutX="650" layoutY="100" style="-fx-font-size: 16px; -fx-background-color: #1d57c4; -fx-text-fill: white;" onAction="#handleFreezeTimeButtonClick"/>
+
+    <Button fx:id="doubleShotButton" text="Double Shot" layoutX="650" layoutY="150" style="-fx-font-size: 16px; -fx-background-color: #38d919; -fx-text-fill: white;" onAction="#handleDoubleShotButtonClick"/>
+
+    <Button fx:id="clearDucksButton" text="Clear Ducks" layoutX="650" layoutY="200" style="-fx-font-size: 16px; -fx-background-color: #ff0000; -fx-text-fill: white;" onAction="#handleClearDucksButtonClick"/>
+</AnchorPane>

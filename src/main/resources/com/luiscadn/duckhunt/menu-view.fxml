@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.paint.Color?>
+<?import javafx.scene.paint.RadialGradient?>
+<?import javafx.scene.paint.Stop?>
+<?import javafx.scene.text.Font?>
+<?import javafx.scene.text.Text?>
+
+<BorderPane fx:id="borderPane" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.luiscadn.duckhunt.controller.MenuController">
+
+    <!-- Contenido del fondo -->
+    <center>
+        <!-- StackPane para superponer imagen y elementos -->
+        <StackPane>
+            <!-- Imagen de fondo del cielo -->
+            <ImageView fitHeight="600.0" fitWidth="700.0">
+                <image>
+                    <Image url="@menu.jpg" />
+                </image>
+            </ImageView>
+            <!-- VBox para alinear el texto en el centro -->
+            <VBox alignment="CENTER" StackPane.alignment="CENTER">
+                <!-- Texto de bienvenida -->
+                <Text fx:id="welcomeText" style="-fx-font-size: 24pt; -fx-font-family: 'Press Start 2P'; -fx-fill: lightblue; -fx-effect: dropshadow( three-pass-box , black, 2 , 0.0 , 1 , 1 );" text="Bienvenido a Duck Hunt!">
+               <font>
+                  <Font name="Cochin Bold" size="41.0" />
+               </font>
+               <fill>
+                  <RadialGradient centerX="0.5" centerY="0.5" radius="0.5">
+                     <stops>
+                        <Stop>
+                           <color>
+                              <Color red="0.9833333492279053" green="1.0" />
+                           </color>
+                        </Stop>
+                        <Stop offset="1.0">
+                           <color>
+                              <Color green="0.8166666626930237" blue="1.0" />
+                           </color>
+                        </Stop>
+                     </stops>
+                  </RadialGradient>
+               </fill></Text>
+                <!-- Botones superpuestos -->
+                <VBox alignment="CENTER" spacing="20">
+                    <Button fx:id="startGameButton" mnemonicParsing="false" onAction="#onStartGameButtonClick" prefHeight="50" prefWidth="200" text="Iniciar Partida" />
+                    <Button fx:id="exitButton" mnemonicParsing="false" onAction="#onExitButtonClick" prefHeight="50" prefWidth="200" text="Salir" />
+                </VBox>
+            </VBox>
+        </StackPane>
+    </center>
+
+</BorderPane>
