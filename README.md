@@ -1,4 +1,4 @@
-# 🦆 Duck Hunt FX
+# Duck Hunt FX
 
 [![Java](https://img.shields.io/badge/Java-21-orange.svg?style=flat&logo=openjdk)](https://openjdk.org/)
 [![JavaFX](https://img.shields.io/badge/JavaFX-21-blue.svg?style=flat)](https://openjfx.io/)
@@ -8,15 +8,19 @@
 
 > A modern desktop remake of the classic retro NES arcade game **Duck Hunt**, built with **Java 21** and **JavaFX 21**. Features custom crosshair mechanics, animated sprite physics, special tactical power-ups, multi-level difficulty progression, and player authentication.
 
+<p align="center">
+  <img src="pre-view.png" alt="Duck Hunt FX Gameplay Preview" width="700"/>
+</p>
+
 ---
 
-## 🎮 Gameplay & Key Features
+## Gameplay & Key Features
 
 - **Retro Arcade Mechanics:** Faithful recreation of sprite animations (flying ducks, falling animation, custom shotgun crosshair).
 - **Tactical Special Abilities:**
-  - ⏱️ **Freeze Time:** Pauses all flying ducks for 10 seconds to line up easy shots.
-  - 💥 **Double Shot:** Multiplies points earned per hit for a limited duration.
-  - 💣 **Clear Ducks:** Tactical nuke clearing all active targets on screen simultaneously.
+  - **Freeze Time:** Pauses all flying ducks for 10 seconds to line up easy shots.
+  - **Double Shot:** Multiplies points earned per hit for a limited duration.
+  - **Clear Ducks:** Tactical nuke clearing all active targets on screen simultaneously.
 - **Dynamic Difficulty:** Flying speed and ducks per wave scale dynamically with each level.
 - **Classic Nostalgia:** Includes the infamous hunting dog laughing at missed shots.
 - **User Authentication:** Player profile registration and login system with domain validation.
@@ -24,11 +28,11 @@
 
 ---
 
-## 🛠️ Tech Stack & Architecture
+## Tech Stack & Architecture
 
-- **Language:** Java 21 (LTS)
-- **UI Framework:** JavaFX 21 (Modular FXML + Programmatic Views)
-- **Build System:** Apache Maven (with included cross-platform wrapper `./mvnw`)
+- **Language:** Java 21 LTS
+- **UI Framework:** JavaFX 21 ~ Modular FXML + Programmatic Views
+- **Build System:** Apache Maven with included cross-platform wrapper `./mvnw`
 - **Testing:** JUnit 5 Jupiter
 - **CI/CD:** GitHub Actions Continuous Integration
 
@@ -52,7 +56,7 @@ com.luiscadn.duckhunt/
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -84,7 +88,7 @@ chmod +x mvnw
 
 ### Running the Game
 
-**Option 1: Using the JavaFX Maven plugin (Recommended)**
+**Option 1: Using the JavaFX Maven plugin**
 ```bash
 ./mvnw javafx:run
 ```
@@ -96,7 +100,7 @@ java -jar target/duckhunt-fx-1.0.0.jar
 
 ---
 
-## 🕹️ Controls
+## Controls
 
 | Action | Control |
 | :--- | :--- |
@@ -108,7 +112,7 @@ java -jar target/duckhunt-fx-1.0.0.jar
 
 ---
 
-## 🧪 Testing
+## Testing
 
 Run the automated JUnit 5 test suite:
 
@@ -120,6 +124,6 @@ Test reports are generated automatically under `target/surefire-reports/`.
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
