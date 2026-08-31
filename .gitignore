@@ -1,3 +1,4 @@
+target
 node_modules
 dist
 dist-ssr
@@ -6,3 +7,4 @@ dist-ssr
 .idea
 .vscode
 *.log
+
