@@ -1,132 +1,255 @@
 import Phaser from "phaser";
 import { FONT_FAMILY, GAME_HEIGHT, GAME_WIDTH, Scenes } from "../constants";
 import { Palette as C, css } from "../art/palette";
+import { Parallax } from "../ui/Parallax";
 import { PixelButton } from "../ui/Button";
 import { Audio } from "../audio/AudioBus";
-import { WEAPONS, WEAPON_ORDER } from "../data/weapons";
-import type { GameScene } from "./GameScene";
+import { bankCoins, bankSpend } from "../data/bank";
+import { UPGRADE_DEFS, buyUpgrade, upgradeCost, upgradeLevel } from "../data/upgrades";
+import { WEAPONS, WEAPON_ORDER, equipWeapon, equippedWeapon, isWeaponUnlocked, unlockWeapon } from "../data/weapons";
+import {
+  COSMETICS,
+  buyCosmetic,
+  cosmeticOwned,
+  equippedCosmetic,
+  type CosmeticSlot,
+} from "../data/cosmetics";
+import { PREMIUM_ITEMS, premiumOwned, requestPurchase } from "../data/premium";
+import { lifetimeDucks } from "../data/achievements";
 
-interface ShopItem {
-  id: string;
-  name: string;
-  desc: string;
-}
-
-const ITEMS: ShopItem[] = [
-  { id: "life", name: "Vida extra", desc: "+1 vida y sube el máximo" },
-  { id: "mag", name: "Cargador +1", desc: "Una bala más por cargador" },
-  { id: "reload", name: "Recarga rápida", desc: "-30% tiempo de recarga" },
-  { id: "aim", name: "Mira ancha", desc: "Hitbox de disparo más grande" },
+type Tab = "mejoras" | "armas" | "cosmeticos" | "premium";
+const TABS: Array<[Tab, string]> = [
+  ["mejoras", "MEJORAS"],
+  ["armas", "ARMAS"],
+  ["cosmeticos", "COSMÉTICOS"],
+  ["premium", "PREMIUM"],
 ];
 
-interface Row {
-  btn: PixelButton;
-  label: Phaser.GameObjects.Text;
-  cost: () => number | null;
-}
-
 export class ShopScene extends Phaser.Scene {
-  private owner!: GameScene;
+  private bg!: Parallax;
+  private tab: Tab = "mejoras";
+  private layer!: Phaser.GameObjects.Container;
   private coinText!: Phaser.GameObjects.Text;
-  private rows: Row[] = [];
+  private tabBtns: PixelButton[] = [];
 
   constructor() {
     super(Scenes.Shop);
   }
 
-  init(data: { game: GameScene }): void {
-    this.owner = data.game;
-  }
-
   create(): void {
-    this.rows = [];
+    this.bg = new Parallax(this, "dusk");
     const cx = GAME_WIDTH / 2;
-    this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x0a0e24, 0.88).setOrigin(0);
-    this.add.rectangle(cx, GAME_HEIGHT / 2, 660, 504, C.ink, 0.97).setStrokeStyle(4, C.gold);
+    this.tab = "mejoras";
+    this.tabBtns = [];
 
-    this.add
-      .text(cx, 52, "TIENDA", { fontFamily: FONT_FAMILY, fontSize: "24px", color: css(C.gold) })
-      .setOrigin(0.5);
+    this.add.image(cx - 118, 34, "shop-icon").setScale(1.4);
+    this.add.text(cx, 30, "TIENDA", { fontFamily: FONT_FAMILY, fontSize: "26px", color: css(C.gold) }).setOrigin(0.5);
     this.coinText = this.add
-      .text(cx, 84, "", { fontFamily: FONT_FAMILY, fontSize: "11px", color: css(C.paper) })
+      .text(cx, 60, "", { fontFamily: FONT_FAMILY, fontSize: "11px", color: css(C.paper) })
       .setOrigin(0.5);
 
-    let y = 122;
-    for (const item of ITEMS) {
-      this.itemRow(cx, y, item.name, item.desc, () => this.owner.shopCost(item.id), () => this.owner.shopBuy(item.id));
-      y += 46;
-    }
-
-    this.add
-      .text(cx, y + 2, "ARMAS", { fontFamily: FONT_FAMILY, fontSize: "10px", color: css(C.paperShade) })
-      .setOrigin(0.5);
-    y += 28;
-    for (const wid of WEAPON_ORDER) {
-      if (wid === "pistol") continue;
-      const w = WEAPONS[wid];
-      this.itemRow(cx, y, w.label, w.desc, () => this.owner.shopCost(`w_${wid}`), () => this.owner.shopBuy(`w_${wid}`));
-      y += 46;
-    }
-
-    new PixelButton(this, cx, GAME_HEIGHT - 44, "SEGUIR  ▶", {
-      width: 300,
-      height: 46,
-      fill: C.rust,
-      onClick: () => {
-        Audio.uiConfirm();
-        this.owner.resumeFromShop();
-        this.scene.stop();
-      },
+    TABS.forEach(([id, label], i) => {
+      const btn = new PixelButton(this, cx - 297 + i * 198, 92, label, {
+        width: 186,
+        height: 40,
+        fontSize: 10,
+        fill: C.inkSoft,
+        onClick: () => {
+          this.tab = id;
+          this.render();
+        },
+      });
+      this.tabBtns.push(btn);
     });
 
-    this.refresh();
+    this.layer = this.add.container(0, 0);
+    this.render();
+
+    new PixelButton(this, cx, GAME_HEIGHT - 38, "VOLVER", {
+      width: 240,
+      height: 44,
+      fill: C.inkSoft,
+      onClick: () => this.scene.start(Scenes.Menu),
+    });
+    this.input.keyboard?.on("keydown-ESC", () => this.scene.start(Scenes.Menu));
+    this.cameras.main.fadeIn(200, 0, 0, 0);
   }
 
-  private itemRow(
-    cx: number,
+  private render(): void {
+    this.layer.removeAll(true);
+    this.coinText.setText(`Banco: ${bankCoins()} monedas`);
+    this.tabBtns.forEach((b, i) => b.setAlpha(TABS[i][0] === this.tab ? 1 : 0.5));
+    if (this.tab === "mejoras") this.renderMejoras();
+    else if (this.tab === "armas") this.renderArmas();
+    else if (this.tab === "cosmeticos") this.renderCosmeticos();
+    else this.renderPremium();
+  }
+
+  private row(
     y: number,
     name: string,
     desc: string,
-    cost: () => number | null,
-    buy: () => boolean,
+    right: string,
+    rightColor: number,
+    enabled: boolean,
+    onClick: () => void,
+    btnLabel: string,
   ): void {
-    this.add.text(cx - 290, y - 8, name, { fontFamily: FONT_FAMILY, fontSize: "10px", color: css(C.paper) });
-    this.add.text(cx - 290, y + 7, desc, { fontFamily: FONT_FAMILY, fontSize: "7px", color: css(C.paperShade) });
-    const label = this.add
-      .text(cx + 150, y, "", { fontFamily: FONT_FAMILY, fontSize: "9px", color: css(C.gold) })
-      .setOrigin(0.5);
-    const btn = new PixelButton(this, cx + 248, y, "", {
-      width: 96,
+    const cx = GAME_WIDTH / 2;
+    this.layer.add(this.add.rectangle(cx, y + 16, 660, 60, C.ink, 0.4).setStrokeStyle(2, C.inkSoft));
+    this.layer.add(this.add.text(cx - 310, y, name, { fontFamily: FONT_FAMILY, fontSize: "11px", color: css(C.paper) }));
+    this.layer.add(this.add.text(cx - 310, y + 16, desc, { fontFamily: FONT_FAMILY, fontSize: "7px", color: css(C.paperShade) }));
+    this.layer.add(
+      this.add.text(cx + 150, y + 8, right, { fontFamily: FONT_FAMILY, fontSize: "10px", color: css(rightColor) }).setOrigin(1, 0),
+    );
+    const btn = new PixelButton(this, cx + 258, y + 8, btnLabel, {
+      width: 100,
       height: 36,
       fontSize: 9,
-      fill: C.foliageDark,
-      onClick: () => {
-        if (buy()) {
-          Audio.coin();
-          this.refresh();
-        } else {
-          Audio.uiBack();
-        }
-      },
+      fill: enabled ? C.foliageDark : C.inkSoft,
+      onClick,
     });
-    this.rows.push({ btn, label, cost });
+    btn.setEnabled(enabled);
+    this.layer.add(btn);
   }
 
-  private refresh(): void {
-    this.coinText.setText(`Monedas: ${this.owner.coinCount}`);
-    for (const row of this.rows) {
-      const cost = row.cost();
-      if (cost === null) {
-        row.label.setText("—");
-        row.btn.setLabel("MÁX").setEnabled(false);
-      } else if (cost === 0) {
-        row.label.setText("");
-        row.btn.setLabel("EQUIPAR").setEnabled(true);
-      } else {
-        row.label.setText(`${cost}`);
-        const afford = this.owner.coinCount >= cost;
-        row.btn.setLabel(afford ? "COMPRAR" : "CARO").setEnabled(afford);
-      }
+  private renderMejoras(): void {
+    let y = 132;
+    for (const def of UPGRADE_DEFS) {
+      const lvl = upgradeLevel(def.id);
+      const cost = upgradeCost(def.id);
+      const maxed = cost === null;
+      const afford = !maxed && bankCoins() >= cost!;
+      this.row(
+        y,
+        `${def.name}  (${lvl}/${def.max})`,
+        def.desc,
+        maxed ? "MÁX" : `${cost}`,
+        maxed ? C.paperShade : C.gold,
+        afford,
+        () => {
+          if (buyUpgrade(def.id)) {
+            Audio.uiConfirm();
+            this.render();
+          } else Audio.uiBack();
+        },
+        maxed ? "—" : "COMPRAR",
+      );
+      y += 74;
     }
+  }
+
+  private renderArmas(): void {
+    let y = 132;
+    for (const wid of WEAPON_ORDER) {
+      const w = WEAPONS[wid];
+      const owned = isWeaponUnlocked(wid, lifetimeDucks());
+      const equipped = equippedWeapon().id === wid;
+      const afford = owned || bankCoins() >= w.bankCost;
+      this.row(
+        y,
+        w.label,
+        w.desc,
+        owned ? "" : `${w.bankCost}`,
+        C.gold,
+        !equipped && afford,
+        () => {
+          if (equipped) return;
+          if (owned) {
+            equipWeapon(wid);
+            Audio.uiConfirm();
+            this.render();
+          } else if (bankSpend(w.bankCost)) {
+            unlockWeapon(wid);
+            equipWeapon(wid);
+            Audio.uiConfirm();
+            this.render();
+          } else Audio.uiBack();
+        },
+        equipped ? "EQUIPADA" : owned ? "EQUIPAR" : "COMPRAR",
+      );
+      y += 74;
+    }
+  }
+
+  private renderCosmeticos(): void {
+    const slots: Array<[CosmeticSlot, string]> = [
+      ["crosshair", "Mira"],
+      ["hat", "Sombrero del croc"],
+      ["theme", "Tema del HUD"],
+    ];
+    let y = 128;
+    for (const [slot, title] of slots) {
+      this.layer.add(this.add.text(GAME_WIDTH / 2 - 310, y - 12, title.toUpperCase(), { fontFamily: FONT_FAMILY, fontSize: "8px", color: css(C.paperShade) }));
+      for (const def of COSMETICS[slot]) {
+        const owned = cosmeticOwned(def.id);
+        const equipped = equippedCosmetic(slot) === def.id;
+        const afford = owned || bankCoins() >= def.price;
+        this.row(
+          y + 6,
+          def.name,
+          owned ? "" : "",
+          equipped ? "" : owned ? "" : `${def.price}`,
+          C.gold,
+          !equipped && afford,
+          () => {
+            if (equipped) return;
+            if (buyCosmetic(slot, def.id)) {
+              Audio.uiConfirm();
+              this.render();
+            } else Audio.uiBack();
+          },
+          equipped ? "EQUIPADO" : owned ? "EQUIPAR" : "COMPRAR",
+        );
+        y += 42;
+      }
+      y += 16;
+    }
+  }
+
+  private renderPremium(): void {
+    this.layer.add(
+      this.add
+        .text(GAME_WIDTH / 2, 122, "Compras con dinero real — demostración, no hay pago activo", {
+          fontFamily: FONT_FAMILY,
+          fontSize: "8px",
+          color: css(C.paperShade),
+        })
+        .setOrigin(0.5),
+    );
+    let y = 150;
+    for (const item of PREMIUM_ITEMS) {
+      const owned = premiumOwned(item.id);
+      this.row(
+        y,
+        item.name,
+        item.desc,
+        item.price,
+        C.foliageLight,
+        !owned,
+        () => {
+          const res = requestPurchase(item.id);
+          this.showModal(res.message);
+        },
+        owned ? "TIENES" : "COMPRAR",
+      );
+      y += 74;
+    }
+  }
+
+  private showModal(msg: string): void {
+    const cx = GAME_WIDTH / 2;
+    const c = this.add.container(0, 0).setDepth(400);
+    c.add(this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x0a0e24, 0.8).setOrigin(0).setInteractive());
+    c.add(this.add.rectangle(cx, GAME_HEIGHT / 2, 560, 220, C.ink).setStrokeStyle(3, C.gold));
+    c.add(this.add.text(cx, GAME_HEIGHT / 2 - 70, "PAGO NO DISPONIBLE", { fontFamily: FONT_FAMILY, fontSize: "14px", color: css(C.gold) }).setOrigin(0.5));
+    c.add(this.add.text(cx, GAME_HEIGHT / 2 - 6, msg, { fontFamily: FONT_FAMILY, fontSize: "8px", color: css(C.paper), align: "center", lineSpacing: 6 }).setOrigin(0.5));
+    c.add(this.add.text(cx, GAME_HEIGHT / 2 + 74, "[ cerrar ]", { fontFamily: FONT_FAMILY, fontSize: "9px", color: css(C.paperShade) }).setOrigin(0.5));
+    c.setSize(GAME_WIDTH, GAME_HEIGHT).setInteractive(new Phaser.Geom.Rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT), Phaser.Geom.Rectangle.Contains);
+    c.on("pointerup", () => c.destroy());
+  }
+
+  update(time: number, delta: number): void {
+    this.bg.update(time, delta);
   }
 }

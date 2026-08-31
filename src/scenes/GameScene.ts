@@ -26,15 +26,8 @@ import { equippedCosmetic, themeAccent } from "../data/cosmetics";
 import { bankDeposit } from "../data/bank";
 import { recordRunStats, type RunSummary } from "../data/stats";
 import { applyRunToMissions } from "../data/missions";
-import {
-  WEAPONS,
-  equipWeapon,
-  equippedWeapon,
-  isWeaponUnlocked,
-  unlockWeapon,
-  type Weapon,
-  type WeaponId,
-} from "../data/weapons";
+import { upgradeEffects } from "../data/upgrades";
+import { WEAPONS, equippedWeapon, isWeaponUnlocked, type Weapon } from "../data/weapons";
 
 interface PowerState {
   unlocked: boolean;
@@ -104,7 +97,6 @@ export class GameScene extends Phaser.Scene {
 
   private coins = 0;
   private coinsGranted = 0;
-  private upgradeCounts: Record<string, number> = {};
 
   private crocMeter = 0;
   private crocReady = false;
@@ -131,7 +123,6 @@ export class GameScene extends Phaser.Scene {
   private paused = false;
   private gameEnded = false;
   private bossFight = false;
-  private pendingStart: "wave" | "boss" = "wave";
   private lastShotAt = 0;
 
   private timeFactor = 1;
@@ -246,21 +237,21 @@ export class GameScene extends Phaser.Scene {
     this.weapon = equippedWeapon();
     if (!isWeaponUnlocked(this.weapon.id, lifetimeDucks())) this.weapon = WEAPONS.pistol;
 
+    const up = upgradeEffects();
     this.score = 0;
-    this.maxLives = Math.max(1, Rules.startingLives + this.diff.livesBonus);
+    this.maxLives = Math.max(1, Rules.startingLives + this.diff.livesBonus + up.extraLives);
     this.lives = this.maxLives;
     this.levelIndex = 1;
-    this.magBonus = 0;
-    this.reloadMul = 1;
-    this.aimPad = 0;
-    this.magazine = this.weapon.magazine;
+    this.magBonus = up.magBonus;
+    this.reloadMul = up.reloadMul;
+    this.aimPad = up.aimPad;
+    this.magazine = this.currentMagazine();
     this.ammo = this.magazine;
     this.combo = 0;
     this.multiplier = 1;
     this.comboTimer = 0;
     this.coins = 0;
     this.coinsGranted = 0;
-    this.upgradeCounts = {};
     this.crocMeter = 0;
     this.crocReady = false;
     this.nextFrenzyAt = Rules.frenzyEvery;
@@ -337,9 +328,13 @@ export class GameScene extends Phaser.Scene {
       this.game.events.emit("dh:banner-mini", "¡BOMBA!");
     } else if (kind.id === "pinata") {
       this.game.events.emit("dh:banner-mini", "¡PIÑATA!");
+    } else if (kind.id === "fox") {
+      this.game.events.emit("dh:banner-mini", "¡ZORRO!");
+    } else if (kind.id === "bear") {
+      this.game.events.emit("dh:banner-mini", "¡OSO!");
     }
 
-    if (!kind.isDecoy) {
+    if (!kind.isDecoy && !kind.isGround) {
       const puff = this.add.image(duck.x, GROUND_Y + 2, "puff").setDepth(18);
       this.tweens.add({ targets: puff, scale: 1.4, alpha: 0, duration: 260, onComplete: () => puff.destroy() });
     }
@@ -361,11 +356,6 @@ export class GameScene extends Phaser.Scene {
       .container(this.gunBaseX, this.gunBaseY, [this.gunImg, this.gunMuzzle])
       .setDepth(97)
       .setAlpha(0.97);
-  }
-
-  private setGunTexture(): void {
-    const key = `gun-${this.weapon.id}`;
-    if (this.textures.exists(key)) this.gunImg.setTexture(key);
   }
 
   private gunRecoil(): void {
@@ -867,7 +857,7 @@ export class GameScene extends Phaser.Scene {
 
   private onDuckBagged(duck: Duck): void {
     Audio.coin();
-    this.croc.retrieve(duck.x, () => Audio.chomp());
+    if (!duck.kind.isGround) this.croc.retrieve(duck.x, () => Audio.chomp());
     this.time.delayedCall(60, () => duck.destroy());
     this.refillMagazine();
   }
@@ -948,24 +938,14 @@ export class GameScene extends Phaser.Scene {
       this.flash(C.gold, 0.4);
       this.syncHud();
 
-      this.pendingStart = this.levelIndex === LAST_LEVEL ? "boss" : "wave";
-      this.time.delayedCall(1100, () => this.openShop());
+      this.time.delayedCall(1100, () => {
+        if (this.gameEnded) return;
+        this.clearing = false;
+        if (this.weather.kind !== "clear") this.game.events.emit("dh:banner-mini", WEATHER_LABEL[this.weather.kind]);
+        if (this.levelIndex >= LAST_LEVEL) this.beginBoss();
+        else this.beginWave();
+      });
     });
-  }
-
-  private openShop(): void {
-    if (this.gameEnded) return;
-    this.scene.pause();
-    this.scene.launch(Scenes.Shop, { game: this });
-  }
-
-  resumeFromShop(): void {
-    this.scene.resume();
-    this.clearing = false;
-    if (this.weather.kind !== "clear") this.game.events.emit("dh:banner-mini", WEATHER_LABEL[this.weather.kind]);
-    if (this.pendingStart === "boss") this.beginBoss();
-    else this.beginWave();
-    this.syncHud();
   }
 
   // ── final boss ───────────────────────────────────────────────────
@@ -1056,70 +1036,6 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  // ── shop API (called by ShopScene) ───────────────────────────────
-
-  get coinCount(): number {
-    return this.coins;
-  }
-
-  shopCost(id: string): number | null {
-    const n = this.upgradeCounts[id] ?? 0;
-    switch (id) {
-      case "life":
-        return this.maxLives >= 6 ? null : 4 + n * 3;
-      case "mag":
-        return this.magBonus >= 4 ? null : 3 + n * 2;
-      case "reload":
-        return n >= 2 ? null : 6;
-      case "aim":
-        return n >= 2 ? null : 5;
-      default: {
-        if (id.startsWith("w_")) {
-          const wid = id.slice(2) as WeaponId;
-          if (this.weapon.id === wid) return null;
-          if (isWeaponUnlocked(wid, lifetimeDucks())) return 0;
-          return WEAPONS[wid].shopCost;
-        }
-        return null;
-      }
-    }
-  }
-
-  shopBuy(id: string): boolean {
-    const cost = this.shopCost(id);
-    if (cost === null || this.coins < cost) return false;
-    this.coins -= cost;
-    this.upgradeCounts[id] = (this.upgradeCounts[id] ?? 0) + 1;
-
-    switch (id) {
-      case "life":
-        this.maxLives++;
-        this.lives++;
-        break;
-      case "mag":
-        this.magBonus++;
-        break;
-      case "reload":
-        this.reloadMul *= 0.7;
-        break;
-      case "aim":
-        this.aimPad += 10;
-        break;
-      default:
-        if (id.startsWith("w_")) {
-          const wid = id.slice(2) as WeaponId;
-          unlockWeapon(wid);
-          equipWeapon(wid);
-          this.weapon = WEAPONS[wid];
-          this.magazine = this.currentMagazine();
-          this.ammo = this.magazine;
-          this.setGunTexture();
-        }
-    }
-    this.syncHud();
-    return true;
-  }
-
   // ── pause / end ──────────────────────────────────────────────────
 
   private togglePause(): void {
@@ -1161,8 +1077,6 @@ export class GameScene extends Phaser.Scene {
   private endGame(win: boolean): void {
     if (this.gameEnded) return;
     this.gameEnded = true;
-    if (this.scene.isActive(Scenes.Shop)) this.scene.stop(Scenes.Shop);
-    if (this.scene.isPaused()) this.scene.resume();
     this.tracker.gameEnded(win, this.levelIndex);
     this.spawnEvent?.remove();
     this.minionEvent?.remove();

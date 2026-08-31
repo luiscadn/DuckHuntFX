@@ -742,6 +742,102 @@ function buildGuns(tm: TM): void {
   }
 }
 
+// ── extra targets: pigeon (flies), fox + bear (run on the ground) ──
+
+function buildCritters(tm: TM): void {
+  // pigeon — 2-frame flap, faces right
+  {
+    const W = 52;
+    const H = 38;
+    const paint = (ctx: CanvasRenderingContext2D, up: boolean): void => {
+      fillPoly(ctx, [[10, 20], [1, 15], [12, 26]], 0x7d8595); // tail
+      ellipse(ctx, 24, 22, 13, 8, 0x9aa2b1); // body
+      ellipse(ctx, 24, 25, 11, 4.5, 0x7d8595); // belly shade
+      ellipse(ctx, 21, 19, 5, 3, 0xc6ccd6); // highlight
+      ellipse(ctx, 36, 16, 6, 5.5, 0x9aa2b1); // head
+      ellipse(ctx, 35, 19, 4, 2.4, 0x3fae9e); // iridescent neck
+      fillPoly(ctx, [[41, 15], [48, 16], [41, 18]], 0xd88b3a); // beak
+      circle(ctx, 37, 15, 1.4, C.duckEye);
+      circle(ctx, 37.4, 14.6, 0.6, 0xffffff);
+      if (up) {
+        fillPoly(ctx, [[22, 18], [14, 3], [30, 6], [31, 19]], 0x5c6474);
+        fillPoly(ctx, [[22, 18], [17, 7], [27, 9], [29, 18]], 0x848c9c);
+      } else {
+        fillPoly(ctx, [[22, 24], [16, 36], [32, 34], [31, 24]], 0x5c6474);
+        fillPoly(ctx, [[22, 24], [19, 32], [29, 31], [30, 24]], 0x848c9c);
+      }
+    };
+    registerSheet(tm, "pigeon", W, H, 2, (ctx, i) => paint(ctx, i === 0));
+  }
+
+  // fox — 2-frame run, feet at the bottom edge, faces right
+  {
+    const W = 60;
+    const H = 42;
+    const paint = (ctx: CanvasRenderingContext2D, a: boolean): void => {
+      // bushy tail
+      fillPoly(ctx, [[6, 20], [-2, 8], [4, 30], [16, 26]], 0xd9772e);
+      circle(ctx, 4, 16, 6, 0xf0f0e6); // tail tip
+      // legs (alternate)
+      const lx = a ? [16, 40] : [22, 34];
+      for (const x of lx) {
+        rect(ctx, x, 26, 4, 12, 0xd9772e);
+        rect(ctx, x, 34, 4, 4, 0x2b2733);
+      }
+      // body
+      ellipse(ctx, 30, 22, 18, 9, 0xd9772e);
+      ellipse(ctx, 30, 26, 15, 4, 0xf0f0e6); // white belly
+      // head + snout
+      ellipse(ctx, 46, 18, 8, 7, 0xd9772e);
+      fillPoly(ctx, [[52, 15], [60, 18], [52, 21]], 0xe08c48); // snout
+      circle(ctx, 59, 18, 1.6, 0x2b2733); // nose
+      fillPoly(ctx, [[44, 12], [42, 3], [49, 9]], 0xd9772e); // ear
+      fillPoly(ctx, [[45, 11], [43.5, 6], [47.5, 9]], 0x2b2733);
+      ellipse(ctx, 47, 20, 4, 2.4, 0xf0f0e6); // cheek
+      circle(ctx, 47, 16, 1.5, 0x2b2733); // eye
+    };
+    registerSheet(tm, "fox", W, H, 2, (ctx, i) => paint(ctx, i === 0));
+  }
+
+  // bear — 2-frame lumber, feet at the bottom edge, faces right
+  {
+    const W = 78;
+    const H = 56;
+    const paint = (ctx: CanvasRenderingContext2D, a: boolean): void => {
+      const lx = a ? [14, 46] : [22, 38];
+      for (const x of lx) {
+        rect(ctx, x, 36, 9, 18, 0x4a3320);
+        rect(ctx, x, 50, 9, 4, 0x2b1d12);
+      }
+      ellipse(ctx, 38, 30, 27, 17, 0x6b4a2f); // body
+      ellipse(ctx, 38, 38, 22, 8, 0x543b26); // belly shade
+      ellipse(ctx, 30, 22, 12, 6, 0x7d5836); // back highlight
+      // head
+      ellipse(ctx, 60, 24, 12, 11, 0x6b4a2f);
+      circle(ctx, 55, 14, 4, 0x543b26); // ear
+      circle(ctx, 66, 14, 4, 0x543b26);
+      fillPoly(ctx, [[64, 24], [74, 26], [74, 31], [62, 31]], 0x8a6540); // snout
+      circle(ctx, 73, 27, 2, 0x2b1d12); // nose
+      circle(ctx, 58, 21, 1.6, 0x2b1d12); // eye
+    };
+    registerSheet(tm, "bear", W, H, 2, (ctx, i) => paint(ctx, i === 0));
+  }
+
+  // little shop icon for the menu button
+  {
+    const s = surface(30, 30);
+    const ctx = s.ctx;
+    rect(ctx, 5, 13, 20, 14, C.gunWood); // stall body
+    rect(ctx, 5, 13, 20, 3, C.gunWoodLit);
+    // striped awning
+    for (let i = 0; i < 5; i++) {
+      fillPoly(ctx, [[3 + i * 4.8, 13], [7.8 + i * 4.8, 13], [5.4 + i * 4.8, 7]], i % 2 ? C.blood : C.paper);
+    }
+    rect(ctx, 13, 19, 4, 8, C.gunWoodLit); // door
+    register(tm, "shop-icon", s);
+  }
+}
+
 /** Entry point — call once from BootScene. */
 export function generateAllTextures(tm: TM): void {
   buildDuck(tm);
@@ -754,6 +850,7 @@ export function generateAllTextures(tm: TM): void {
   buildBadges(tm);
   buildExtras(tm);
   buildGuns(tm);
+  buildCritters(tm);
 }
 
 export const DuckFrame = { W: DUCK_W, H: DUCK_H };

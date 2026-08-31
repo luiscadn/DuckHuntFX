@@ -73,7 +73,7 @@ export class MenuScene extends Phaser.Scene {
       ["PUNTAJES", () => this.scene.start(Scenes.Scores)],
       [`LOGROS ${done}/${ACHIEVEMENTS.length}`, () => this.scene.start(Scenes.Achievements)],
       ["MISIONES", () => this.scene.start(Scenes.Missions)],
-      ["COSMÉTICOS", () => this.scene.start(Scenes.Cosmetics)],
+      ["TIENDA", () => this.scene.start(Scenes.Shop)],
       ["ESTADÍSTICAS", () => this.scene.start(Scenes.Stats)],
       ["AJUSTES", () => this.scene.start(Scenes.Settings)],
     ];
@@ -84,9 +84,10 @@ export class MenuScene extends Phaser.Scene {
         width: 158,
         height: 48,
         fontSize: 10,
-        fill: C.inkSoft,
+        fill: label === "TIENDA" ? C.foliageDark : C.inkSoft,
         onClick: fn,
       });
+      if (label === "TIENDA") this.add.image(gx - 56, gy, "shop-icon").setScale(1.1);
     });
     this.add
       .text(cx, 400, "¿cómo jugar?", { fontFamily: FONT_FAMILY, fontSize: "9px", color: css(C.paper) })
@@ -163,9 +164,10 @@ export class MenuScene extends Phaser.Scene {
       "  si dejas de acertar. Combo 10/20/30 = ¡FRENESÍ!",
       "· Q suelta al cocodrilo cuando su barra está llena.",
       "· ¡No dispares al pato de goma (señuelo)!",
-      "· Reventar piñatas da monedas. Dispara a los",
-      "  arbustos y a las nubes: pasan cosas.",
-      "· Entre niveles hay TIENDA. Nivel 5 = jefe final.",
+      "· También salen palomas, zorros y osos.",
+      "· Las monedas van al BANCO. Gástalas en el menú →",
+      "  TIENDA (mejoras, armas, cosméticos, premium).",
+      "· Nivel 5 = jefe final.",
       "",
       "Click para cerrar",
     ];

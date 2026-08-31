@@ -28,29 +28,29 @@ export interface Weapon {
   shake: number;
   /** lifetime ducks needed to unlock (0 = from the start) */
   unlockAt: number;
-  shopCost: number;
+  bankCost: number;
 }
 
 export const WEAPONS: Record<WeaponId, Weapon> = {
   pistol: {
     id: "pistol", label: "Pistola", desc: "Fiable. Cargador 3.",
     magazine: 3, reloadMs: 650, pellets: 1, spreadDeg: 0, wobble: 0,
-    fireCooldownMs: 130, heavy: false, shake: 0.004, unlockAt: 0, shopCost: 0,
+    fireCooldownMs: 130, heavy: false, shake: 0.004, unlockAt: 0, bankCost: 0,
   },
   shotgun: {
     id: "shotgun", label: "Escopeta", desc: "5 perdigones en abanico.",
     magazine: 2, reloadMs: 950, pellets: 5, spreadDeg: 12, wobble: 0,
-    fireCooldownMs: 260, heavy: false, shake: 0.010, unlockAt: 60, shopCost: 8,
+    fireCooldownMs: 260, heavy: false, shake: 0.010, unlockAt: 999999, bankCost: 1600,
   },
   rifle: {
     id: "rifle", label: "Rifle", desc: "Pegada fuerte, atraviesa blindados.",
     magazine: 4, reloadMs: 800, pellets: 1, spreadDeg: 0, wobble: 0,
-    fireCooldownMs: 320, heavy: true, shake: 0.008, unlockAt: 150, shopCost: 10,
+    fireCooldownMs: 320, heavy: true, shake: 0.008, unlockAt: 999999, bankCost: 3200,
   },
   smg: {
     id: "smg", label: "Metralleta", desc: "Cargador 12, dispara rapidísimo.",
     magazine: 12, reloadMs: 1000, pellets: 1, spreadDeg: 0, wobble: 10,
-    fireCooldownMs: 80, heavy: false, shake: 0.003, unlockAt: 300, shopCost: 12,
+    fireCooldownMs: 80, heavy: false, shake: 0.003, unlockAt: 999999, bankCost: 4800,
   },
 };
 

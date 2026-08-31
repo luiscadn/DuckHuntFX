@@ -8,11 +8,16 @@
  *   bomb     shoot it to blow up nearby ducks; letting it escape hurts twice as much
  *   pinata   pop it for a shower of coins (and sometimes a power-up refresh)
  *   decoy    a rubber duck — do NOT shoot it, that costs points and the combo
+ *   pigeon   quick flying bird, worth a bit more than a duck
+ *   fox      runs along the ground, fast and slippery, high points
+ *   bear     lumbers along the ground, takes 3 hits, big score
  */
 
 import { Palette as C } from "../art/palette";
 
-export type DuckKindId = "normal" | "fast" | "armored" | "golden" | "bomb" | "pinata" | "decoy";
+export type DuckKindId =
+  | "normal" | "fast" | "armored" | "golden" | "bomb" | "pinata" | "decoy"
+  | "pigeon" | "fox" | "bear";
 
 export interface DuckKind {
   id: DuckKindId;
@@ -35,6 +40,10 @@ export interface DuckKind {
   dropsLoot?: boolean;
   /** not a real target: shooting it is punished */
   isDecoy?: boolean;
+  /** runs along the grass instead of flying (fox, bear) */
+  isGround?: boolean;
+  /** distinct spritesheet key + run/flap anim; defaults to the mallard */
+  sheet?: string;
   label?: string;
 }
 
@@ -98,15 +107,50 @@ export const DUCK_KINDS: Record<DuckKindId, DuckKind> = {
     isDecoy: true,
     label: "SEÑUELO",
   },
+  pigeon: {
+    id: "pigeon",
+    tint: 0xffffff,
+    scale: 0.95,
+    speedMul: 1.45,
+    hp: 1,
+    pointsMul: 2,
+    escapePenalty: 1,
+    sheet: "pigeon",
+    label: "PALOMA",
+  },
+  fox: {
+    id: "fox",
+    tint: 0xffffff,
+    scale: 1,
+    speedMul: 1.6,
+    hp: 1,
+    pointsMul: 3,
+    escapePenalty: 1,
+    isGround: true,
+    sheet: "fox",
+    label: "ZORRO",
+  },
+  bear: {
+    id: "bear",
+    tint: 0xffffff,
+    scale: 1.35,
+    speedMul: 0.5,
+    hp: 3,
+    pointsMul: 6,
+    escapePenalty: 0,
+    isGround: true,
+    sheet: "bear",
+    label: "OSO",
+  },
 };
 
 /** Spawn weights per level. Missing kinds simply never appear that level. */
 const TABLE: Record<number, Partial<Record<DuckKindId, number>>> = {
-  1: { normal: 92, pinata: 8 },
-  2: { normal: 68, fast: 15, pinata: 9, decoy: 6, golden: 2 },
-  3: { normal: 52, fast: 18, armored: 12, pinata: 8, decoy: 7, golden: 3 },
-  4: { normal: 40, fast: 20, armored: 15, bomb: 9, pinata: 7, decoy: 6, golden: 3 },
-  5: { normal: 32, fast: 20, armored: 17, bomb: 13, pinata: 6, decoy: 6, golden: 6 },
+  1: { normal: 82, pinata: 8, pigeon: 10 },
+  2: { normal: 56, fast: 14, pinata: 8, decoy: 6, pigeon: 12, fox: 6, golden: 2 },
+  3: { normal: 42, fast: 16, armored: 10, pinata: 7, decoy: 6, pigeon: 12, fox: 8, bear: 4, golden: 3 },
+  4: { normal: 32, fast: 17, armored: 13, bomb: 8, pinata: 6, decoy: 5, pigeon: 12, fox: 9, bear: 5, golden: 3 },
+  5: { normal: 24, fast: 17, armored: 15, bomb: 12, pinata: 5, decoy: 5, pigeon: 12, fox: 10, bear: 6, golden: 6 },
 };
 
 export function pickDuckKind(level: number): DuckKind {

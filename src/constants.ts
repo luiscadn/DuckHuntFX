@@ -22,7 +22,6 @@ export const Scenes = {
   Settings: "Settings",
   Stats: "Stats",
   Missions: "Missions",
-  Cosmetics: "Cosmetics",
   Shop: "Shop",
   Game: "Game",
   Hud: "Hud",
@@ -41,6 +40,8 @@ export const StoreKeys = {
   bank: "dh:bank",
   missions: "dh:missions",
   cosmetics: "dh:cosmetics",
+  upgrades: "dh:upgrades",
+  premium: "dh:premium",
 } as const;
 
 /** Core gameplay rules (arcade light-gun shooter, tuned for feel). */

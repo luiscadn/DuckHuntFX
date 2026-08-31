@@ -71,16 +71,44 @@ export class Duck extends Phaser.GameObjects.Sprite {
       return;
     }
 
-    if (!scene.anims.exists("duck-flap")) {
+    if (kind.sheet) this.setTexture(kind.sheet);
+
+    if (kind.isGround) {
+      // a fox / bear that runs along the grass — enters from a side edge
+      this.setOrigin(0.5, 1);
+      const fromLeft = Math.random() < 0.5;
+      this.x = fromLeft ? -50 : GAME_WIDTH + 50;
+      this.baseY = GROUND_Y + 8;
+      this.y = this.baseY;
+      this.vx = (fromLeft ? 1 : -1) * this.speed;
+      this.vy = 0;
+      this.setFlipX(!fromLeft);
+      const runKey = `${kind.sheet}-run`;
+      if (!scene.anims.exists(runKey)) {
+        scene.anims.create({
+          key: runKey,
+          frames: scene.anims.generateFrameNumbers(kind.sheet!, { start: 0, end: 1 }),
+          frameRate: kind.id === "bear" ? 6 : 12,
+          repeat: -1,
+        });
+      }
+      this.play(runKey);
+      this.setInteractive({ pixelPerfect: false, useHandCursor: false });
+      return;
+    }
+
+    const flapKey = kind.sheet ? `${kind.sheet}-flap` : "duck-flap";
+    const endFrame = kind.sheet === "pigeon" ? 1 : 3;
+    if (!scene.anims.exists(flapKey)) {
       scene.anims.create({
-        key: "duck-flap",
-        frames: scene.anims.generateFrameNumbers("duck", { start: 0, end: 3 }),
+        key: flapKey,
+        frames: scene.anims.generateFrameNumbers(kind.sheet ?? "duck", { start: 0, end: endFrame }),
         frameRate: 12,
         repeat: -1,
       });
     }
-    this.play("duck-flap");
-    if (kind.id === "fast" && this.anims.currentAnim) this.anims.timeScale = 1.5;
+    this.play(flapKey);
+    if ((kind.id === "fast" || kind.id === "pigeon") && this.anims.currentAnim) this.anims.timeScale = 1.4;
 
     if (kind.pulse) {
       this.pulseTween = scene.tweens.add({
@@ -150,6 +178,30 @@ export class Duck extends Phaser.GameObjects.Sprite {
       if (this.x < -50 || this.x > GAME_WIDTH + 50) {
         this.state = "done";
         this.emit("escaped", this);
+      }
+      return;
+    }
+
+    if (this.kind.isGround) {
+      if (this.state === "alive") {
+        this.x += this.vx * dt;
+        // a light bob so the run reads
+        this.y = this.baseY - Math.abs(Math.sin(this.scene.time.now / (this.kind.id === "bear" ? 130 : 80))) * 4;
+        this.updateShadow();
+        if (this.x < -70 || this.x > GAME_WIDTH + 70) {
+          this.state = "done";
+          this.emit("escaped", this);
+        }
+      } else if (this.state === "falling") {
+        this.y += this.vy * dt;
+        this.vy += 900 * dt;
+        this.rotation += dt * 8;
+        this.updateShadow();
+        if (this.y >= this.baseY + 4) {
+          this.state = "done";
+          this.landSplash();
+          this.emit("bagged", this);
+        }
       }
       return;
     }
@@ -235,9 +287,14 @@ export class Duck extends Phaser.GameObjects.Sprite {
     this.state = "falling";
     this.pulseTween?.stop();
     this.stop();
-    this.setTexture("duck-hit");
+    if (this.kind.sheet) this.setTint(0x8a8a8a);
+    else this.setTexture("duck-hit");
     this.setScale(this.baseScale);
     this.disableInteractive();
+    if (this.kind.isGround) {
+      this.vy = -70;
+      return true;
+    }
     this.vx = Phaser.Math.FloatBetween(-40, 40);
     this.vy = -120;
     this.scene.tweens.add({
