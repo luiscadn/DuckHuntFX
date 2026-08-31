@@ -15,8 +15,8 @@ import { Weather, pickWeather } from "../ui/Weather";
 import { Audio } from "../audio/AudioBus";
 import { Duck } from "../objects/Duck";
 import { Croc } from "../objects/Croc";
-import { BossDuck } from "../objects/BossDuck";
-import { LAST_LEVEL, PowerConfig, levelAt, unlockedPowers } from "../data/levels";
+import { Boss } from "../objects/Boss";
+import { LAST_LEVEL, PowerConfig, isBossLevel, levelAt, unlockedPowers } from "../data/levels";
 import { currentUser, recordResult } from "../data/accounts";
 import { recordRun } from "../data/scores";
 import { DUCK_KINDS, pickDuckKind, type DuckKind, type DuckKindId } from "../data/ducks";
@@ -28,6 +28,9 @@ import { recordRunStats, type RunSummary } from "../data/stats";
 import { applyRunToMissions } from "../data/missions";
 import { upgradeEffects } from "../data/upgrades";
 import { WEAPONS, equippedWeapon, isWeaponUnlocked, type Weapon } from "../data/weapons";
+
+export type GameMode = "campaign" | "timeattack" | "survival";
+const TIMEATTACK_MS = 90000;
 
 interface PowerState {
   unlocked: boolean;
@@ -53,11 +56,13 @@ export interface HudSnapshot {
   comboWindow: number;
   coins: number;
   weapon: string;
-  boss: { hp: number; maxHp: number } | null;
+  boss: { hp: number; maxHp: number; name: string } | null;
   crocMeter: number;
   crocReady: boolean;
   frenzy: boolean;
   theme: number;
+  mode: GameMode;
+  timeLeftMs: number;
   powers: Record<PowerId, PowerState & { key: string; label: string; icon: string; durationMs: number; cooldownMs: number }>;
   now: number;
 }
@@ -70,7 +75,7 @@ export class GameScene extends Phaser.Scene {
   private croc!: Croc;
   private crosshair!: Phaser.GameObjects.Image;
   private ducks!: Phaser.GameObjects.Group;
-  private boss?: BossDuck;
+  private boss?: Boss;
 
   private gunView!: Phaser.GameObjects.Container;
   private gunImg!: Phaser.GameObjects.Image;
@@ -118,6 +123,11 @@ export class GameScene extends Phaser.Scene {
   private runPinatas = 0;
   private runByKind: Partial<Record<DuckKindId, number>> = {};
 
+  private mode: GameMode = "campaign";
+  private endless = false;
+  private timeLeftMs = -1;
+  private endlessRampAt = 0;
+
   private reloading = false;
   private clearing = false;
   private paused = false;
@@ -139,6 +149,10 @@ export class GameScene extends Phaser.Scene {
 
   constructor() {
     super(Scenes.Game);
+  }
+
+  init(data: { mode?: GameMode }): void {
+    this.mode = data?.mode ?? "campaign";
   }
 
   create(): void {
@@ -179,6 +193,13 @@ export class GameScene extends Phaser.Scene {
     kb.on("keydown-TWO", () => this.activatePower(Power.Freeze));
     kb.on("keydown-THREE", () => this.activatePower(Power.Clear));
     kb.on("keydown-Q", () => this.releaseCroc());
+
+    // on-screen touch controls (HudScene) route through the game bus
+    const ev = this.game.events;
+    ev.on("dh:ctrl-reload", this.reload, this);
+    ev.on("dh:ctrl-pause", this.togglePause, this);
+    ev.on("dh:ctrl-power", this.activatePower, this);
+    ev.on("dh:ctrl-croc", this.releaseCroc, this);
 
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
 
@@ -238,8 +259,14 @@ export class GameScene extends Phaser.Scene {
     if (!isWeaponUnlocked(this.weapon.id, lifetimeDucks())) this.weapon = WEAPONS.pistol;
 
     const up = upgradeEffects();
+    this.endless = this.mode !== "campaign";
+    this.timeLeftMs = this.mode === "timeattack" ? TIMEATTACK_MS : -1;
+    this.endlessRampAt = 0;
     this.score = 0;
-    this.maxLives = Math.max(1, Rules.startingLives + this.diff.livesBonus + up.extraLives);
+    this.maxLives =
+      this.mode === "survival"
+        ? 1
+        : Math.max(1, Rules.startingLives + this.diff.livesBonus + up.extraLives);
     this.lives = this.maxLives;
     this.levelIndex = 1;
     this.magBonus = up.magBonus;
@@ -300,7 +327,25 @@ export class GameScene extends Phaser.Scene {
       callback: () => this.trySpawn(),
     });
     this.trySpawn();
+    if (this.endless) this.endlessRampAt = this.time.now + 22000;
     this.syncHud();
+  }
+
+  /** time-attack / survival: keep ramping difficulty without a level-clear ceremony */
+  private endlessRamp(): void {
+    this.endlessRampAt = this.time.now + 22000;
+    if (this.levelIndex >= LAST_LEVEL) return;
+    this.levelIndex++;
+    while (isBossLevel(this.levelIndex) && this.levelIndex < LAST_LEVEL) this.levelIndex++;
+    const lvl = levelAt(this.levelIndex);
+    unlockedPowers(this.levelIndex).forEach((p) => (this.powers[p].unlocked = true));
+    this.spawnEvent?.remove();
+    this.spawnEvent = this.time.addEvent({
+      delay: lvl.spawnEveryMs * this.diff.spawnMul,
+      loop: true,
+      callback: () => this.trySpawn(),
+    });
+    this.game.events.emit("dh:banner-mini", `OLEADA ${this.levelIndex}`);
   }
 
   private trySpawn(): void {
@@ -413,6 +458,9 @@ export class GameScene extends Phaser.Scene {
   private shoot(p: Phaser.Input.Pointer): void {
     Audio.unlock();
     if (this.paused || this.gameEnded) return;
+    // ignore the tap that pressed an on-screen HUD button
+    const uiTapAt = (this.registry.get("dh:uiTapAt") as number | undefined) ?? 0;
+    if (this.game.loop.now - uiTapAt < 120) return;
     if (this.time.now - this.lastShotAt < this.weapon.fireCooldownMs) return;
 
     this.tweens.add({ targets: this.crosshair, scale: { from: 0.8, to: 1 }, duration: 140, ease: "back.out" });
@@ -871,7 +919,7 @@ export class GameScene extends Phaser.Scene {
     this.multiplier = 1;
     this.comboTimer = 0;
     this.nextFrenzyAt = Rules.frenzyEvery;
-    const penalty = this.diff.escapeCostsLife ? kind.escapePenalty : 0;
+    const penalty = this.mode === "timeattack" || !this.diff.escapeCostsLife ? 0 : kind.escapePenalty;
     this.lives -= penalty;
     if (penalty > 0) this.tracker.lostLife();
 
@@ -902,6 +950,7 @@ export class GameScene extends Phaser.Scene {
 
   private maybeAdvanceLevel(): void {
     if (this.clearing || this.gameEnded || this.bossFight) return;
+    if (this.endless) return; // time-attack / survival never "clear"
     if (this.score < levelAt(this.levelIndex).targetScore) return;
 
     this.clearing = true;
@@ -912,60 +961,65 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(1300, () => {
       if (this.gameEnded) return;
       this.aliveDucks().forEach((d) => d.destroy());
-
       if (this.levelIndex >= LAST_LEVEL) {
         this.endGame(true);
         return;
       }
-
-      this.levelIndex++;
-      const next = levelAt(this.levelIndex);
-      this.lives = Math.min(this.maxLives, this.lives + 1);
-      this.magazine = this.currentMagazine();
-      this.ammo = this.magazine;
-      this.combo = 0;
-      this.multiplier = 1;
-      this.comboTimer = 0;
-      this.nextFrenzyAt = Rules.frenzyEvery;
-
-      this.bg.destroy();
-      this.bg = new Parallax(this, next.timeOfDay);
-      this.weather.destroy();
-      this.weather = new Weather(this, pickWeather(this.levelIndex));
-
-      Audio.levelUp();
-      this.announce(`NIVEL ${next.index}`, next.name);
-      this.flash(C.gold, 0.4);
-      this.syncHud();
-
-      this.time.delayedCall(1100, () => {
-        if (this.gameEnded) return;
-        this.clearing = false;
-        if (this.weather.kind !== "clear") this.game.events.emit("dh:banner-mini", WEATHER_LABEL[this.weather.kind]);
-        if (this.levelIndex >= LAST_LEVEL) this.beginBoss();
-        else this.beginWave();
-      });
+      this.advanceToNextLevel();
     });
   }
 
-  // ── final boss ───────────────────────────────────────────────────
+  private advanceToNextLevel(): void {
+    this.levelIndex++;
+    const next = levelAt(this.levelIndex);
+    this.lives = Math.min(this.maxLives, this.lives + 1);
+    this.magazine = this.currentMagazine();
+    this.ammo = this.magazine;
+    this.combo = 0;
+    this.multiplier = 1;
+    this.comboTimer = 0;
+    this.nextFrenzyAt = Rules.frenzyEvery;
+
+    this.bg.destroy();
+    this.bg = new Parallax(this, next.timeOfDay);
+    this.weather.destroy();
+    this.weather = new Weather(this, pickWeather(this.levelIndex));
+
+    Audio.levelUp();
+    this.announce(`NIVEL ${next.index}`, next.name);
+    this.flash(C.gold, 0.4);
+    this.syncHud();
+
+    this.time.delayedCall(1100, () => {
+      if (this.gameEnded) return;
+      this.clearing = false;
+      if (this.weather.kind !== "clear") this.game.events.emit("dh:banner-mini", WEATHER_LABEL[this.weather.kind]);
+      if (isBossLevel(this.levelIndex)) this.beginBoss();
+      else this.beginWave();
+    });
+  }
+
+  // ── bosses ───────────────────────────────────────────────────────
 
   private beginBoss(): void {
     if (this.gameEnded) return;
+    const variant = levelAt(this.levelIndex).boss ?? "rey";
+    const final = variant === "rey";
     this.bossFight = true;
     unlockedPowers(this.levelIndex).forEach((p) => (this.powers[p].unlocked = true));
     Audio.setBossMode(true);
     Audio.setIntensity(3);
-    this.announce("JEFE FINAL", "El Rey Pato");
+
+    const diffMul = this.diff.label === "DURA" ? 1.35 : this.diff.label === "RELAX" ? 0.7 : 1;
+    const base = variant === "rey" ? 34 : variant === "garza" ? 22 : 26;
+    const hp = Math.max(8, Math.round(base * diffMul * (1 + this.levelIndex / 70)));
+
+    this.boss = new Boss(this, variant, hp);
+    this.announce(final ? "JEFE FINAL" : "JEFE", this.boss.displayName);
     this.flash(C.blood, 0.4);
 
-    const hp = 30 + (this.diff.label === "DURA" ? 14 : this.diff.label === "RELAX" ? -8 : 0);
-    this.boss = new BossDuck(this, hp);
-    this.boss.on("spawnMinions", (n: number) => {
-      for (let i = 0; i < n; i++) {
-        const kind = Math.random() < 0.5 ? DUCK_KINDS.fast : DUCK_KINDS.normal;
-        this.spawnDuck(kind, Phaser.Math.Between(150, 210));
-      }
+    this.boss.on("spawnMinions", (n: number, kindId: DuckKindId) => {
+      for (let i = 0; i < n; i++) this.spawnDuck(DUCK_KINDS[kindId] ?? DUCK_KINDS.normal, Phaser.Math.Between(150, 220));
     });
     this.boss.once("defeated", () => this.onBossDefeated());
 
@@ -981,12 +1035,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onBossDefeated(): void {
+    if (!this.scene.isActive() || this.gameEnded) return;
     this.minionEvent?.remove();
     Audio.setBossMode(false);
     this.flash(0xffffff, 0.7);
     this.doShake(600, 0.02);
     this.aliveDucks().forEach((d) => d.panic());
-    this.time.delayedCall(1600, () => this.endGame(true));
+    const final = this.levelIndex >= LAST_LEVEL;
+    this.time.delayedCall(1600, () => {
+      if (this.gameEnded) return;
+      this.boss?.destroy();
+      this.boss = undefined;
+      this.bossFight = false;
+      if (final) this.endGame(true);
+      else this.advanceToNextLevel();
+    });
   }
 
   // ── power-ups ────────────────────────────────────────────────────
@@ -1133,6 +1196,11 @@ export class GameScene extends Phaser.Scene {
 
   private cleanup(): void {
     this.input.setDefaultCursor("default");
+    const ev = this.game.events;
+    ev.off("dh:ctrl-reload", this.reload, this);
+    ev.off("dh:ctrl-pause", this.togglePause, this);
+    ev.off("dh:ctrl-power", this.activatePower, this);
+    ev.off("dh:ctrl-croc", this.releaseCroc, this);
     this.spawnEvent?.remove();
     this.minionEvent?.remove();
     this.weather?.destroy();
@@ -1144,7 +1212,10 @@ export class GameScene extends Phaser.Scene {
   // ── juice helpers ────────────────────────────────────────────────
 
   private doShake(duration: number, intensity: number): void {
-    if (this.shakeOn) this.cameras.main.shake(duration, intensity);
+    // guard against a delayedCall / tween callback landing after scene shutdown
+    if (this.shakeOn && this.scene.isActive() && this.cameras?.main) {
+      this.cameras.main.shake(duration, intensity);
+    }
   }
 
   private muzzleFlash(x: number, y: number): void {
@@ -1252,7 +1323,13 @@ export class GameScene extends Phaser.Scene {
       lives: this.lives,
       maxLives: this.maxLives,
       level: this.levelIndex,
-      levelName: this.bossFight ? "JEFE" : lvl.name,
+      levelName: this.bossFight
+        ? "JEFE"
+        : this.mode === "timeattack"
+          ? "CONTRARRELOJ"
+          : this.mode === "survival"
+            ? "SUPERVIVENCIA"
+            : lvl.name,
       target: lvl.targetScore,
       prevTarget,
       ammo: this.ammo,
@@ -1264,11 +1341,13 @@ export class GameScene extends Phaser.Scene {
       comboWindow: this.comboWindow(),
       coins: this.coins,
       weapon: this.weapon.label,
-      boss: this.boss ? { hp: this.boss.hp, maxHp: this.boss.maxHp } : null,
+      boss: this.boss ? { hp: this.boss.hp, maxHp: this.boss.maxHp, name: this.boss.displayName } : null,
       crocMeter: this.crocMeter,
       crocReady: this.crocReady,
       frenzy: this.time.now < this.frenzyUntil,
       theme: themeAccent(),
+      mode: this.mode,
+      timeLeftMs: this.timeLeftMs,
       powers,
       now: this.time.now,
     };
@@ -1280,6 +1359,16 @@ export class GameScene extends Phaser.Scene {
       this.bg?.update(time, delta);
       return;
     }
+
+    if (this.timeLeftMs >= 0) {
+      this.timeLeftMs -= delta;
+      if (this.timeLeftMs <= 0) {
+        this.timeLeftMs = 0;
+        this.endGame(true);
+        return;
+      }
+    }
+    if (this.endless && this.time.now >= this.endlessRampAt) this.endlessRamp();
 
     this.updateTimeDistortion(delta);
     const scaled = delta * this.timeFactor;

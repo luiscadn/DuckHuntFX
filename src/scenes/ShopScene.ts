@@ -173,38 +173,74 @@ export class ShopScene extends Phaser.Scene {
   }
 
   private renderCosmeticos(): void {
+    const cx = GAME_WIDTH / 2;
     const slots: Array<[CosmeticSlot, string]> = [
-      ["crosshair", "Mira"],
-      ["hat", "Sombrero del croc"],
-      ["theme", "Tema del HUD"],
+      ["crosshair", "MIRAS"],
+      ["hat", "SOMBREROS DEL COCODRILO"],
+      ["theme", "TEMAS DEL HUD"],
     ];
-    let y = 128;
-    for (const [slot, title] of slots) {
-      this.layer.add(this.add.text(GAME_WIDTH / 2 - 310, y - 12, title.toUpperCase(), { fontFamily: FONT_FAMILY, fontSize: "8px", color: css(C.paperShade) }));
-      for (const def of COSMETICS[slot]) {
+    slots.forEach(([slot, title], si) => {
+      const y0 = 128 + si * 126;
+      this.layer.add(
+        this.add.text(cx - 320, y0, title, { fontFamily: FONT_FAMILY, fontSize: "9px", color: css(C.paperShade) }),
+      );
+      COSMETICS[slot].forEach((def, ii) => {
+        const x = cx - 300 + ii * 165;
+        const y = y0 + 24;
         const owned = cosmeticOwned(def.id);
         const equipped = equippedCosmetic(slot) === def.id;
         const afford = owned || bankCoins() >= def.price;
-        this.row(
-          y + 6,
-          def.name,
-          owned ? "" : "",
-          equipped ? "" : owned ? "" : `${def.price}`,
-          C.gold,
-          !equipped && afford,
-          () => {
-            if (equipped) return;
-            if (buyCosmetic(slot, def.id)) {
-              Audio.uiConfirm();
-              this.render();
-            } else Audio.uiBack();
-          },
-          equipped ? "EQUIPADO" : owned ? "EQUIPAR" : "COMPRAR",
+
+        const card = this.add
+          .rectangle(x + 72, y + 42, 150, 92, C.ink, 0.5)
+          .setStrokeStyle(equipped ? 3 : 2, equipped ? C.gold : C.inkSoft)
+          .setInteractive({ useHandCursor: true });
+        this.layer.add(card);
+
+        // visual preview
+        if (slot === "theme") {
+          this.layer.add(this.add.rectangle(x + 72, y + 22, 46, 26, def.accent ?? 0xffffff).setStrokeStyle(1, C.ink));
+        } else {
+          const tex = slot === "crosshair" ? `xh-${def.id}` : def.id === "none" ? "" : `hat-${def.id}`;
+          if (tex && this.textures.exists(tex)) {
+            this.layer.add(this.add.image(x + 72, y + 24, tex).setScale(slot === "hat" ? 1.6 : 1.05));
+          } else {
+            this.layer.add(
+              this.add.text(x + 72, y + 20, "∅", { fontFamily: FONT_FAMILY, fontSize: "14px", color: css(C.paperShade) }).setOrigin(0.5),
+            );
+          }
+        }
+
+        this.layer.add(
+          this.add
+            .text(x + 72, y + 46, def.name, {
+              fontFamily: FONT_FAMILY,
+              fontSize: "7px",
+              color: css(C.paper),
+              align: "center",
+              wordWrap: { width: 138 },
+            })
+            .setOrigin(0.5),
         );
-        y += 42;
-      }
-      y += 16;
-    }
+        this.layer.add(
+          this.add
+            .text(x + 72, y + 68, equipped ? "EQUIPADO" : owned ? "EQUIPAR" : `${def.price}`, {
+              fontFamily: FONT_FAMILY,
+              fontSize: "8px",
+              color: css(equipped ? C.foliageLight : owned ? C.paper : afford ? C.gold : C.blood),
+            })
+            .setOrigin(0.5),
+        );
+
+        card.on("pointerup", () => {
+          if (equipped) return;
+          if (buyCosmetic(slot, def.id)) {
+            Audio.uiConfirm();
+            this.render();
+          } else Audio.uiBack();
+        });
+      });
+    });
   }
 
   private renderPremium(): void {

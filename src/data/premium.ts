@@ -18,10 +18,10 @@ export interface PremiumItem {
 }
 
 export const PREMIUM_ITEMS: PremiumItem[] = [
-  { id: "coins_big", name: "Cofre de 3.000 monedas", desc: "Monedas para la tienda de mejoras", price: "4,99 €" },
-  { id: "all_weapons", name: "Arsenal completo", desc: "Desbloquea escopeta, rifle y metralleta", price: "6,99 €" },
-  { id: "croc_gold", name: "Cocodrilo de oro", desc: "Skin dorado brillante para el cocodrilo", price: "2,99 €" },
-  { id: "no_ads_plus", name: "Pase Salpicón", desc: "Sin límite de vidas + todos los cosméticos", price: "9,99 €" },
+  { id: "coins_big", name: "Cofre de 3.000 monedas", desc: "Monedas para la tienda de mejoras", price: "$ 12.900 COP" },
+  { id: "all_weapons", name: "Arsenal completo", desc: "Desbloquea escopeta, rifle y metralleta", price: "$ 21.900 COP" },
+  { id: "croc_gold", name: "Cocodrilo de oro", desc: "Skin dorado brillante para el cocodrilo", price: "$ 9.900 COP" },
+  { id: "no_ads_plus", name: "Pase Salpicón", desc: "Sin límite de vidas + todos los cosméticos", price: "$ 39.900 COP" },
 ];
 
 type PremiumStore = { owned: string[] };

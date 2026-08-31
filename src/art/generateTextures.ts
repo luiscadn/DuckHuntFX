@@ -516,6 +516,78 @@ function buildBoss(tm: TM): void {
     }
   };
   registerSheet(tm, "boss", W, H, 2, (ctx, i) => paint(ctx, i === 0));
+
+  // ── LA GARZA (heron) ──────────────────────────────────────────────
+  {
+    const gw = 160;
+    const gh = 128;
+    const g = (ctx: CanvasRenderingContext2D, up: boolean): void => {
+      // trailing legs
+      line(ctx, 66, 84, 30, 120, 0xe0b23a, 4);
+      line(ctx, 74, 84, 48, 122, 0xe0b23a, 4);
+      // body
+      ellipse(ctx, 78, 74, 34, 20, 0x8aa0b4);
+      ellipse(ctx, 74, 84, 27, 10, 0x5f7688);
+      ellipse(ctx, 70, 62, 20, 8, 0xc3d2de);
+      // long S-neck
+      ctx.strokeStyle = "#" + (0xc3d2de).toString(16);
+      ctx.lineWidth = 12;
+      ctx.beginPath();
+      ctx.moveTo(96, 66);
+      ctx.quadraticCurveTo(120, 40, 108, 22);
+      ctx.stroke();
+      // head
+      ellipse(ctx, 110, 20, 12, 9, 0xe8eef2);
+      // crest plume
+      fillPoly(ctx, [[112, 12], [128, 6], [118, 18]], 0x2b2f3a);
+      // dagger beak
+      fillPoly(ctx, [[120, 17], [156, 22], [120, 24]], 0xf2c024);
+      fillPoly(ctx, [[120, 21], [156, 22], [120, 25]], 0xc79412);
+      // eye + stripe
+      circle(ctx, 112, 18, 2, C.duckEye);
+      line(ctx, 104, 15, 118, 14, 0x2b2f3a, 2);
+      // wing
+      if (up) {
+        fillPoly(ctx, [[74, 58], [40, 8], [110, 18], [104, 60]], 0x6b8296);
+        fillPoly(ctx, [[74, 58], [48, 20], [96, 26], [96, 54]], 0x8aa0b4);
+      } else {
+        fillPoly(ctx, [[74, 84], [46, 126], [116, 116], [110, 82]], 0x6b8296);
+        fillPoly(ctx, [[74, 84], [56, 116], [104, 108], [104, 84]], 0x8aa0b4);
+      }
+    };
+    registerSheet(tm, "boss-garza", gw, gh, 2, (ctx, i) => g(ctx, i === 0));
+  }
+
+  // ── EL JABALÍ (wild boar) — origin (0.5,1), stands on the ground ──
+  {
+    const jw = 168;
+    const jh = 112;
+    const j = (ctx: CanvasRenderingContext2D, a: boolean): void => {
+      const lx = a ? [40, 118] : [58, 100];
+      for (const x of lx) {
+        rect(ctx, x, 70, 12, 40, 0x2b2018);
+        rect(ctx, x, 100, 12, 10, 0x14100b);
+      }
+      // bulky body — big shoulders, small rump
+      fillPoly(ctx, [[24, 82], [40, 40], [96, 32], [140, 46], [150, 78], [130, 88], [40, 90]], 0x3d2e20);
+      ellipse(ctx, 92, 66, 44, 22, 0x4a3626);
+      ellipse(ctx, 92, 78, 36, 10, 0x2b2018);
+      // bristle mane
+      for (let i = 0; i < 9; i++) fillPoly(ctx, [[48 + i * 8, 40], [52 + i * 8, 40], [50 + i * 8, 24]], 0x14100b);
+      // head + snout (right side)
+      ellipse(ctx, 138, 62, 20, 18, 0x3d2e20);
+      fillPoly(ctx, [[150, 56], [168, 60], [166, 74], [148, 72]], 0x5a4433);
+      circle(ctx, 165, 66, 2.4, 0x14100b); // nostril
+      circle(ctx, 165, 60, 2.4, 0x14100b);
+      // tusks
+      fillPoly(ctx, [[152, 72], [148, 58], [156, 66]], 0xe8e0cc);
+      fillPoly(ctx, [[158, 72], [156, 60], [163, 68]], 0xe8e0cc);
+      // ear + eye
+      fillPoly(ctx, [[132, 46], [128, 32], [140, 42]], 0x2b2018);
+      circle(ctx, 140, 56, 2.2, 0xd94a2b);
+    };
+    registerSheet(tm, "boss-jabali", jw, jh, 2, (ctx, i) => j(ctx, i === 0));
+  }
 }
 
 function buildExtras(tm: TM): void {

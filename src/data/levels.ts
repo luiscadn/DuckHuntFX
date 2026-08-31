@@ -1,86 +1,64 @@
-/** The five levels and the power-up tuning, all in one place. */
+/** 100 procedurally-tuned levels, boss schedule, and the power-up config. */
 
 import { Power, type PowerId } from "../constants";
 
 export type TimeOfDay = "day" | "dusk" | "night";
+export type BossVariant = "garza" | "jabali" | "rey";
 
 export interface LevelDef {
   index: number;
   name: string;
   timeOfDay: TimeOfDay;
-  /** Cumulative total score required to clear this level. */
+  /** cumulative total score required to clear this level */
   targetScore: number;
   spawnEveryMs: number;
   maxAlive: number;
   speed: [min: number, max: number];
-  /** How many shots you get on each duck before it can escape. */
   magazine: number;
-  /** Power-ups newly available from this level onward. */
-  unlocks: PowerId[];
+  /** if set, this level is a boss fight instead of a normal wave */
+  boss?: BossVariant;
 }
 
-export const LEVELS: LevelDef[] = [
-  {
-    index: 1,
-    name: "Amanecer",
-    timeOfDay: "day",
-    targetScore: 900,
-    spawnEveryMs: 1500,
-    maxAlive: 2,
-    speed: [90, 130],
-    magazine: 3,
-    unlocks: [],
-  },
-  {
-    index: 2,
-    name: "Pleno Sol",
-    timeOfDay: "day",
-    targetScore: 2300,
-    spawnEveryMs: 1300,
-    maxAlive: 2,
-    speed: [110, 155],
-    magazine: 3,
-    unlocks: [Power.Double],
-  },
-  {
-    index: 3,
-    name: "Atardecer",
-    timeOfDay: "dusk",
-    targetScore: 4300,
-    spawnEveryMs: 1150,
-    maxAlive: 3,
-    speed: [130, 185],
-    magazine: 4,
-    unlocks: [Power.Freeze],
-  },
-  {
-    index: 4,
-    name: "Ocaso",
-    timeOfDay: "dusk",
-    targetScore: 7000,
-    spawnEveryMs: 1000,
-    maxAlive: 3,
-    speed: [150, 210],
-    magazine: 4,
-    unlocks: [Power.Clear],
-  },
-  {
-    index: 5,
-    name: "Luna llena",
-    timeOfDay: "night",
-    targetScore: 10500,
-    spawnEveryMs: 850,
-    maxAlive: 4,
-    speed: [175, 245],
-    magazine: 5,
-    unlocks: [Power.Double, Power.Freeze, Power.Clear],
-  },
+export const LAST_LEVEL = 100;
+export const BOSS_EVERY = 15; // 15, 30, 45, 60, 75, 90 → mid-bosses; 100 → final
+
+const NAMES = [
+  "Amanecer", "Rocío", "Pleno Sol", "Espadañas", "Bochorno", "Vuelo Bajo",
+  "Atardecer", "Reflejo", "Ocaso", "Brumas", "Luna Llena", "Marea Alta",
+  "Cañaveral", "Tormenta", "Aguas Turbias",
 ];
 
-export const LAST_LEVEL = LEVELS.length;
+function bossFor(i: number): BossVariant | undefined {
+  if (i === LAST_LEVEL) return "rey";
+  if (i % BOSS_EVERY === 0) return (i / BOSS_EVERY) % 2 === 1 ? "garza" : "jabali";
+  return undefined;
+}
+
+function build(i: number): LevelDef {
+  const perLevel = (k: number) => 500 + 90 * k + 2 * k * k;
+  let target = 0;
+  for (let k = 1; k <= i; k++) target += perLevel(k);
+  return {
+    index: i,
+    name: NAMES[(i - 1) % NAMES.length],
+    timeOfDay: (["day", "day", "day", "dusk", "dusk", "night", "night"] as TimeOfDay[])[(i - 1) % 7],
+    targetScore: Math.round(target),
+    spawnEveryMs: Math.max(480, 1500 - 10 * i),
+    maxAlive: Math.min(8, 2 + Math.floor(i / 9)),
+    speed: [Math.min(300, Math.round(85 + 2.4 * i)), Math.min(400, Math.round(125 + 3 * i))],
+    magazine: Math.min(8, 3 + Math.floor(i / 18)),
+    boss: bossFor(i),
+  };
+}
+
+const LEVELS_CACHE: LevelDef[] = Array.from({ length: LAST_LEVEL }, (_, k) => build(k + 1));
 
 export function levelAt(index: number): LevelDef {
-  return LEVELS[Math.min(Math.max(index, 1), LAST_LEVEL) - 1];
+  return LEVELS_CACHE[Math.min(Math.max(index, 1), LAST_LEVEL) - 1];
+}
+
+export function isBossLevel(index: number): boolean {
+  return !!levelAt(index).boss;
 }
 
 /** Power-up behaviour. Durations in ms; cooldown starts when the effect ends. */
@@ -95,9 +73,9 @@ export const PowerConfig: Record<
 
 /** Which power-ups exist by the time you reach `level`. */
 export function unlockedPowers(level: number): PowerId[] {
-  const set = new Set<PowerId>();
-  for (const l of LEVELS) {
-    if (l.index <= level) l.unlocks.forEach((p) => set.add(p));
-  }
-  return [...set];
+  const out: PowerId[] = [];
+  if (level >= 2) out.push(Power.Double);
+  if (level >= 3) out.push(Power.Freeze);
+  if (level >= 4) out.push(Power.Clear);
+  return out;
 }

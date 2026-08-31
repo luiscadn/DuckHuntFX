@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- maskable: keep the art inside the safe 80% circle, full-bleed background -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a2a6c"/>
+      <stop offset="1" stop-color="#2f6fb0"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <circle cx="392" cy="150" r="34" fill="#ffd447"/>
+  <path d="M56 372 L176 332 L296 360 L456 332 L456 456 L56 456 Z" fill="#1f7a3f"/>
+  <g transform="translate(150 180) scale(0.86)">
+    <ellipse cx="120" cy="150" rx="118" ry="30" fill="#0b1026" opacity="0.28"/>
+    <ellipse cx="120" cy="96" rx="92" ry="66" fill="#f2f0e4"/>
+    <ellipse cx="120" cy="118" rx="92" ry="42" fill="#d9d7c6"/>
+    <path d="M150 40 q58 -32 88 6 q-16 42 -68 38 q-28 -18 -20 -44 Z" fill="#f2f0e4"/>
+    <circle cx="192" cy="46" r="9" fill="#0b1026"/>
+    <path d="M226 52 l52 6 l-52 22 q-14 -12 0 -28 Z" fill="#f2a416"/>
+  </g>
+</svg>

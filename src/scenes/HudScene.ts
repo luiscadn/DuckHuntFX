@@ -3,6 +3,7 @@ import { FONT_FAMILY, GAME_WIDTH, Power, Scenes, type PowerId } from "../constan
 import { Palette as C, css } from "../art/palette";
 import type { AchievementDef } from "../data/achievements";
 import type { HudSnapshot } from "./GameScene";
+import { isTouchDevice } from "../ui/touch";
 
 const POWER_ORDER: PowerId[] = [Power.Double, Power.Freeze, Power.Clear];
 
@@ -19,6 +20,8 @@ export class HudScene extends Phaser.Scene {
   private coinText!: Phaser.GameObjects.Text;
   private weaponText!: Phaser.GameObjects.Text;
   private barFill!: Phaser.GameObjects.Rectangle;
+  private barBg!: Phaser.GameObjects.Rectangle;
+  private timerText!: Phaser.GameObjects.Text;
   private comboBar!: Phaser.GameObjects.Rectangle;
   private comboBarBg!: Phaser.GameObjects.Rectangle;
   private bossBarBg!: Phaser.GameObjects.Rectangle;
@@ -34,6 +37,9 @@ export class HudScene extends Phaser.Scene {
 
   private toastQueue: AchievementDef[] = [];
   private toastBusy = false;
+
+  private touch = false;
+  private touchCrocBtn?: Phaser.GameObjects.Container;
 
   private powerSlots: Array<{
     root: Phaser.GameObjects.Container;
@@ -56,6 +62,8 @@ export class HudScene extends Phaser.Scene {
     this.powerSlots = [];
     this.toastQueue = [];
     this.toastBusy = false;
+    this.touch = isTouchDevice();
+    this.touchCrocBtn = undefined;
 
     this.coinText = this.add
       .text(20, this.scale.height - 22, "", { fontFamily: FONT_FAMILY, fontSize: "10px", color: css(C.gold) })
@@ -84,7 +92,7 @@ export class HudScene extends Phaser.Scene {
     this.bossBarBg = this.add.rectangle(GAME_WIDTH / 2, 118, 440, 16, C.ink, 0.75).setStrokeStyle(2, C.blood).setVisible(false);
     this.bossBarFill = this.add.rectangle(GAME_WIDTH / 2 - 216, 118, 432, 10, C.blood).setOrigin(0, 0.5).setVisible(false);
     this.bossLabel = this.add
-      .text(GAME_WIDTH / 2, 102, "EL REY PATO", { fontFamily: FONT_FAMILY, fontSize: "9px", color: css(C.gold) })
+      .text(GAME_WIDTH / 2, 102, "", { fontFamily: FONT_FAMILY, fontSize: "9px", color: css(C.gold) })
       .setOrigin(0.5)
       .setVisible(false);
 
@@ -92,11 +100,16 @@ export class HudScene extends Phaser.Scene {
     this.scoreText = this.add
       .text(GAME_WIDTH / 2, 22, "0", { fontFamily: FONT_FAMILY, fontSize: "30px", color: css(C.paper), stroke: css(C.ink), strokeThickness: 5 })
       .setOrigin(0.5, 0);
-    this.add.rectangle(GAME_WIDTH / 2, 66, 260, 10, C.ink, 0.55).setOrigin(0.5);
+    this.barBg = this.add.rectangle(GAME_WIDTH / 2, 66, 260, 10, C.ink, 0.55).setOrigin(0.5);
     this.barFill = this.add.rectangle(GAME_WIDTH / 2 - 128, 66, 4, 6, C.gold).setOrigin(0, 0.5);
     this.levelText = this.add
       .text(GAME_WIDTH / 2, 82, "", { fontFamily: FONT_FAMILY, fontSize: "9px", color: css(C.paperShade) })
       .setOrigin(0.5, 0);
+    // time-attack countdown (replaces the progress bar in that mode)
+    this.timerText = this.add
+      .text(GAME_WIDTH / 2, 60, "", { fontFamily: FONT_FAMILY, fontSize: "16px", color: css(C.gold), stroke: css(C.ink), strokeThickness: 4 })
+      .setOrigin(0.5)
+      .setVisible(false);
 
     // ammo
     this.reloadText = this.add
@@ -130,6 +143,15 @@ export class HudScene extends Phaser.Scene {
         .setOrigin(0.5, 0);
       root.add([border, icon, bar, keyText]);
       root.setVisible(false);
+      if (this.touch) {
+        root
+          .setSize(52, 52)
+          .setInteractive({ useHandCursor: true })
+          .on("pointerdown", () => {
+            this.markUiTap();
+            this.game.events.emit("dh:ctrl-power", id);
+          });
+      }
       this.powerSlots.push({ root, icon, border, bar, keyText });
     });
 
@@ -142,6 +164,8 @@ export class HudScene extends Phaser.Scene {
       .setOrigin(0.5);
     this.banner = this.add.container(GAME_WIDTH / 2, this.scale.height / 2 - 40, [this.bannerBig, this.bannerSmall]).setAlpha(0);
 
+    if (this.touch) this.buildTouchControls();
+
     this.game.events.on("dh:banner", this.showBanner, this);
     this.game.events.on("dh:banner-mini", this.showMiniBanner, this);
     this.game.events.on("dh:combo", this.pingCombo, this);
@@ -152,6 +176,52 @@ export class HudScene extends Phaser.Scene {
       this.game.events.off("dh:combo", this.pingCombo, this);
       this.game.events.off("dh:achievement", this.queueToast, this);
     });
+  }
+
+  /** Tell GameScene the pointer was consumed by a HUD button, so it won't also fire a shot. */
+  private markUiTap(): void {
+    this.registry.set("dh:uiTapAt", this.game.loop.now);
+  }
+
+  private touchButton(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    label: string,
+    onTap: () => void,
+  ): Phaser.GameObjects.Container {
+    const bg = this.add.rectangle(0, 0, w, h, C.ink, 0.5).setStrokeStyle(3, C.paperShade);
+    const txt = this.add
+      .text(0, 0, label, { fontFamily: FONT_FAMILY, fontSize: "11px", color: css(C.paper), align: "center" })
+      .setOrigin(0.5);
+    const root = this.add
+      .container(x, y, [bg, txt])
+      .setDepth(60)
+      .setSize(w, h)
+      .setScrollFactor(0)
+      .setInteractive({ useHandCursor: true });
+    root.on("pointerdown", () => {
+      this.markUiTap();
+      bg.setFillStyle(C.gold, 0.55);
+      onTap();
+    });
+    root.on("pointerup", () => bg.setFillStyle(C.ink, 0.5));
+    root.on("pointerout", () => bg.setFillStyle(C.ink, 0.5));
+    return root;
+  }
+
+  private buildTouchControls(): void {
+    const h = this.scale.height;
+    // pause — top-left, clear of the hearts row
+    this.touchButton(40, 122, 52, 44, "II", () => this.game.events.emit("dh:ctrl-pause"));
+    // reload — bottom-left
+    this.touchButton(96, h - 118, 140, 60, "RECARGAR", () => this.game.events.emit("dh:ctrl-reload"));
+    // crocodile ultimate — above reload, only shown when ready
+    this.touchCrocBtn = this.touchButton(96, h - 192, 128, 54, "COCODRILO", () =>
+      this.game.events.emit("dh:ctrl-croc"),
+    );
+    this.touchCrocBtn.setVisible(false);
   }
 
   private queueToast(def: AchievementDef): void {
@@ -261,7 +331,23 @@ export class HudScene extends Phaser.Scene {
     }
 
     this.scoreText.setText(s.score.toLocaleString("es"));
-    this.levelText.setText(`NIVEL ${s.level} · ${s.levelName}`);
+    const campaign = s.mode === "campaign";
+    this.levelText.setText(campaign ? `NIVEL ${s.level} · ${s.levelName}` : `${s.levelName} · OLEADA ${s.level}`);
+
+    // time-attack countdown / progress bar swap
+    const timeAttack = s.mode === "timeattack" && s.timeLeftMs >= 0;
+    this.timerText.setVisible(timeAttack);
+    this.barBg.setVisible(campaign);
+    this.barFill.setVisible(campaign);
+    if (timeAttack) {
+      const total = Math.max(0, Math.ceil(s.timeLeftMs / 1000));
+      const mm = Math.floor(total / 60);
+      const ss = total % 60;
+      this.timerText.setText(`${mm}:${ss.toString().padStart(2, "0")}`);
+      this.timerText.setColor(css(total <= 10 ? C.blood : C.gold));
+      if (total <= 10) this.timerText.setScale(1 + 0.08 * Math.sin(s.now / 90));
+      else this.timerText.setScale(1);
+    }
     this.coinText.setText(`MONEDAS ${s.coins}`).setColor(css(s.theme));
     this.weaponText.setText(s.weapon.toUpperCase());
     this.barFill.setFillStyle(s.theme);
@@ -269,7 +355,8 @@ export class HudScene extends Phaser.Scene {
     // crocodile ultimate meter
     const cm = Phaser.Math.Clamp(s.crocMeter / 100, 0, 1);
     this.crocBarFill.width = 4 + cm * 108;
-    this.crocKey.setVisible(s.crocReady);
+    this.crocKey.setVisible(s.crocReady && !this.touch);
+    this.touchCrocBtn?.setVisible(s.crocReady);
     if (s.crocReady) {
       const pulse = 0.6 + 0.4 * Math.sin(s.now / 120);
       this.crocBarFill.setFillStyle(s.theme).setAlpha(pulse);
@@ -288,11 +375,16 @@ export class HudScene extends Phaser.Scene {
     this.bossBarBg.setVisible(!!boss);
     this.bossBarFill.setVisible(!!boss);
     this.bossLabel.setVisible(!!boss);
-    if (boss) this.bossBarFill.width = 432 * Phaser.Math.Clamp(boss.hp / boss.maxHp, 0, 1);
+    if (boss) {
+      this.bossBarFill.width = 432 * Phaser.Math.Clamp(boss.hp / boss.maxHp, 0, 1);
+      this.bossLabel.setText(boss.name);
+    }
 
-    const span = Math.max(1, s.target - s.prevTarget);
-    const prog = Phaser.Math.Clamp((s.score - s.prevTarget) / span, 0, 1);
-    this.barFill.width = 4 + prog * 252;
+    if (campaign) {
+      const span = Math.max(1, s.target - s.prevTarget);
+      const prog = Phaser.Math.Clamp((s.score - s.prevTarget) / span, 0, 1);
+      this.barFill.width = 4 + prog * 252;
+    }
 
     // ammo
     if (this.bulletMag !== s.magazine) {

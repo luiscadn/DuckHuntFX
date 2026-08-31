@@ -7,6 +7,8 @@ import { Audio } from "../audio/AudioBus";
 import { currentUser, logout } from "../data/accounts";
 import { ACHIEVEMENTS, unlockedCount } from "../data/achievements";
 import { bankCoins } from "../data/bank";
+import { tutorialDone } from "./TutorialScene";
+import type { GameMode } from "./GameScene";
 
 export class MenuScene extends Phaser.Scene {
   private bg!: Parallax;
@@ -63,10 +65,7 @@ export class MenuScene extends Phaser.Scene {
       width: 340,
       height: 52,
       fill: C.rust,
-      onClick: () => {
-        this.cameras.main.fadeOut(220, 0, 0, 0);
-        this.time.delayedCall(240, () => this.scene.start(Scenes.Game));
-      },
+      onClick: () => this.openModeSelect(),
     });
     const done = unlockedCount();
     const grid: Array<[string, () => void]> = [
@@ -90,10 +89,18 @@ export class MenuScene extends Phaser.Scene {
       if (label === "TIENDA") this.add.image(gx - 56, gy, "shop-icon").setScale(1.1);
     });
     this.add
-      .text(cx, 400, "¿cómo jugar?", { fontFamily: FONT_FAMILY, fontSize: "9px", color: css(C.paper) })
+      .text(cx - 70, 400, "¿cómo jugar?", { fontFamily: FONT_FAMILY, fontSize: "9px", color: css(C.paper) })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
       .on("pointerup", () => this.toggleHelp());
+    this.add
+      .text(cx + 78, 400, "TUTORIAL", { fontFamily: FONT_FAMILY, fontSize: "9px", color: css(C.gold) })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on("pointerup", () => {
+        Audio.uiConfirm();
+        this.scene.start(Scenes.Tutorial);
+      });
 
     // logout
     const out = this.add
@@ -113,6 +120,100 @@ export class MenuScene extends Phaser.Scene {
     });
 
     this.cameras.main.fadeIn(260, 0, 0, 0);
+
+    if (!tutorialDone()) this.time.delayedCall(400, () => this.offerTutorial());
+  }
+
+  private openModeSelect(): void {
+    const cx = GAME_WIDTH / 2;
+    const c = this.add.container(0, 0).setDepth(300);
+    c.add(this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x0a0e24, 0.78).setOrigin(0).setInteractive());
+    c.add(this.add.rectangle(cx, GAME_HEIGHT / 2, 560, 380, C.ink).setStrokeStyle(4, C.gold));
+    c.add(
+      this.add.text(cx, GAME_HEIGHT / 2 - 150, "ELIGE UN MODO", { fontFamily: FONT_FAMILY, fontSize: "16px", color: css(C.gold) }).setOrigin(0.5),
+    );
+
+    const modes: Array<[GameMode, string, string]> = [
+      ["campaign", "CAMPAÑA", "100 niveles · jefes cada 15 · Rey Pato final"],
+      ["timeattack", "CONTRARRELOJ", "90 segundos · haz el máximo de puntos"],
+      ["survival", "SUPERVIVENCIA", "una sola vida · oleadas infinitas"],
+    ];
+    modes.forEach(([mode, label, desc], i) => {
+      const y = GAME_HEIGHT / 2 - 92 + i * 84;
+      c.add(
+        new PixelButton(this, cx, y, label, {
+          width: 420,
+          height: 52,
+          fill: i === 0 ? C.rust : C.inkSoft,
+          onClick: () => {
+            this.cameras.main.fadeOut(220, 0, 0, 0);
+            this.time.delayedCall(240, () => this.scene.start(Scenes.Game, { mode }));
+          },
+        }),
+      );
+      c.add(
+        this.add
+          .text(cx, y + 30, desc, { fontFamily: FONT_FAMILY, fontSize: "7px", color: css(C.paperShade) })
+          .setOrigin(0.5),
+      );
+    });
+
+    c.add(
+      this.add
+        .text(cx, GAME_HEIGHT / 2 + 150, "[ cancelar ]", { fontFamily: FONT_FAMILY, fontSize: "9px", color: css(C.paperShade) })
+        .setOrigin(0.5)
+        .setInteractive({ useHandCursor: true })
+        .on("pointerup", () => {
+          Audio.uiBack();
+          c.destroy();
+        }),
+    );
+  }
+
+  private offerTutorial(): void {
+    if (this.helpLayer) return;
+    const cx = GAME_WIDTH / 2;
+    const c = this.add.container(0, 0).setDepth(260);
+    c.add(this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x0a0e24, 0.7).setOrigin(0).setInteractive());
+    c.add(this.add.rectangle(cx, GAME_HEIGHT / 2, 520, 240, C.ink).setStrokeStyle(4, C.gold));
+    c.add(
+      this.add.text(cx, GAME_HEIGHT / 2 - 74, "¿PRIMERA VEZ?", { fontFamily: FONT_FAMILY, fontSize: "15px", color: css(C.gold) }).setOrigin(0.5),
+    );
+    c.add(
+      this.add
+        .text(cx, GAME_HEIGHT / 2 - 30, "Un tutorial rápido de 5 pasos.\nPuedes saltarlo cuando quieras.", {
+          fontFamily: FONT_FAMILY,
+          fontSize: "9px",
+          color: css(C.paper),
+          align: "center",
+          lineSpacing: 6,
+        })
+        .setOrigin(0.5),
+    );
+    c.add(
+      new PixelButton(this, cx - 108, GAME_HEIGHT / 2 + 52, "TUTORIAL", {
+        width: 190,
+        height: 44,
+        fill: C.rust,
+        onClick: () => this.scene.start(Scenes.Tutorial),
+      }),
+    );
+    c.add(
+      new PixelButton(this, cx + 108, GAME_HEIGHT / 2 + 52, "AHORA NO", {
+        width: 190,
+        height: 44,
+        fill: C.inkSoft,
+        onClick: () => {
+          try {
+            localStorage.setItem("dh:tutorialDone", "1");
+          } catch {
+            /* ignore */
+          }
+          Audio.uiBack();
+          c.destroy();
+        },
+      }),
+    );
   }
 
   private spawnAmbientDucks(): void {
@@ -167,7 +268,9 @@ export class MenuScene extends Phaser.Scene {
       "· También salen palomas, zorros y osos.",
       "· Las monedas van al BANCO. Gástalas en el menú →",
       "  TIENDA (mejoras, armas, cosméticos, premium).",
-      "· Nivel 5 = jefe final.",
+      "· 100 niveles. Jefes cada 15 (La Garza, El Jabalí…)",
+      "  y EL REY PATO en el nivel 100.",
+      "· Modos: Campaña · Contrarreloj · Supervivencia.",
       "",
       "Click para cerrar",
     ];
