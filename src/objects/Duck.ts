@@ -25,6 +25,7 @@ export class Duck extends Phaser.GameObjects.Sprite {
   private readonly baseScale: number;
   private vx: number;
   private vy: number;
+  private baseY = 0;
   private weavePhase = Math.random() * Math.PI * 2;
   private jukeAt: number;
   private speedMul = 1; // Freeze power
@@ -50,6 +51,20 @@ export class Duck extends Phaser.GameObjects.Sprite {
     this.vx = dir * this.speed * Phaser.Math.FloatBetween(0.45, 0.8);
     this.vy = -this.speed * Phaser.Math.FloatBetween(0.7, 1);
     this.jukeAt = scene.time.now + this.nextJuke();
+
+    if (kind.isDecoy) {
+      // a rubber duck bobbing across the water — never flies up
+      this.setTexture("duck-decoy");
+      const fromLeft = Math.random() < 0.5;
+      this.x = fromLeft ? -30 : GAME_WIDTH + 30;
+      this.baseY = Phaser.Math.Between(GROUND_Y - 120, GROUND_Y - 36);
+      this.y = this.baseY;
+      this.vx = (fromLeft ? 1 : -1) * this.speed;
+      this.vy = 0;
+      this.setFlipX(!fromLeft);
+      this.setInteractive({ pixelPerfect: false, useHandCursor: false });
+      return;
+    }
 
     if (!scene.anims.exists("duck-flap")) {
       scene.anims.create({
@@ -98,6 +113,18 @@ export class Duck extends Phaser.GameObjects.Sprite {
 
   tick(_time: number, deltaMs: number): void {
     const dt = (deltaMs / 1000) * this.speedMul;
+
+    if (this.kind.isDecoy) {
+      if (this.state !== "alive") return;
+      this.x += this.vx * dt;
+      this.y = this.baseY + Math.sin(this.scene.time.now / 260 + this.weavePhase) * 5;
+      this.rotation = Math.sin(this.scene.time.now / 320 + this.weavePhase) * 0.12;
+      if (this.x < -50 || this.x > GAME_WIDTH + 50) {
+        this.state = "done";
+        this.emit("escaped", this);
+      }
+      return;
+    }
 
     if (this.state === "alive") {
       if (this.scene.time.now >= this.jukeAt) {

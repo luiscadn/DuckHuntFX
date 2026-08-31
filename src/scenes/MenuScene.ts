@@ -6,6 +6,7 @@ import { PixelButton } from "../ui/Button";
 import { Audio } from "../audio/AudioBus";
 import { currentUser, logout } from "../data/accounts";
 import { ACHIEVEMENTS, unlockedCount } from "../data/achievements";
+import { bankCoins } from "../data/bank";
 
 export class MenuScene extends Phaser.Scene {
   private bg!: Parallax;
@@ -44,7 +45,7 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5);
     if (user) {
       this.add
-        .text(cx, 176, `Mejor ${user.bestScore.toLocaleString("es")}   ·   Nivel máx ${user.bestLevel}`, {
+        .text(cx, 172, `Mejor ${user.bestScore.toLocaleString("es")}   ·   Banco ${bankCoins()} monedas`, {
           fontFamily: FONT_FAMILY,
           fontSize: "9px",
           color: css(C.paper),
@@ -58,9 +59,9 @@ export class MenuScene extends Phaser.Scene {
     this.spawnAmbientDucks();
 
     // buttons
-    new PixelButton(this, cx, 234, "JUGAR", {
+    new PixelButton(this, cx, 216, "JUGAR", {
       width: 340,
-      height: 56,
+      height: 52,
       fill: C.rust,
       onClick: () => {
         this.cameras.main.fadeOut(220, 0, 0, 0);
@@ -71,20 +72,27 @@ export class MenuScene extends Phaser.Scene {
     const grid: Array<[string, () => void]> = [
       ["PUNTAJES", () => this.scene.start(Scenes.Scores)],
       [`LOGROS ${done}/${ACHIEVEMENTS.length}`, () => this.scene.start(Scenes.Achievements)],
+      ["MISIONES", () => this.scene.start(Scenes.Missions)],
+      ["COSMÉTICOS", () => this.scene.start(Scenes.Cosmetics)],
+      ["ESTADÍSTICAS", () => this.scene.start(Scenes.Stats)],
       ["AJUSTES", () => this.scene.start(Scenes.Settings)],
-      ["CÓMO JUGAR", () => this.toggleHelp()],
     ];
     grid.forEach(([label, fn], i) => {
-      const gx = cx + (i % 2 === 0 ? -90 : 90);
-      const gy = 300 + Math.floor(i / 2) * 62;
+      const gx = cx + ((i % 3) - 1) * 168;
+      const gy = 276 + Math.floor(i / 3) * 58;
       new PixelButton(this, gx, gy, label, {
-        width: 168,
-        height: 52,
-        fontSize: 11,
+        width: 158,
+        height: 48,
+        fontSize: 10,
         fill: C.inkSoft,
         onClick: fn,
       });
     });
+    this.add
+      .text(cx, 400, "¿cómo jugar?", { fontFamily: FONT_FAMILY, fontSize: "9px", color: css(C.paper) })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on("pointerup", () => this.toggleHelp());
 
     // logout
     const out = this.add
@@ -150,12 +158,14 @@ export class MenuScene extends Phaser.Scene {
       "· Apunta con el mouse y haz click para disparar.",
       "· Tienes un cargador por pato: si se te acaba y el",
       "  pato escapa, pierdes una vida.",
-      "· R = recargar.  P / ESC = pausa.",
-      "· 1 2 3 = power-ups (se desbloquean por nivel).",
-      "· El combo sube el multiplicador (x4) pero se",
-      "  vacía si dejas de acertar.",
-      "· Entre niveles hay TIENDA: gasta monedas en",
-      "  mejoras y armas. Nivel 5 = jefe final.",
+      "· R = recargar.  P / ESC = pausa.  1 2 3 = power-ups.",
+      "· El combo sube el multiplicador (x4) y se vacía",
+      "  si dejas de acertar. Combo 10/20/30 = ¡FRENESÍ!",
+      "· Q suelta al cocodrilo cuando su barra está llena.",
+      "· ¡No dispares al pato de goma (señuelo)!",
+      "· Reventar piñatas da monedas. Dispara a los",
+      "  arbustos y a las nubes: pasan cosas.",
+      "· Entre niveles hay TIENDA. Nivel 5 = jefe final.",
       "",
       "Click para cerrar",
     ];

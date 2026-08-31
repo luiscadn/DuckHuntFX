@@ -19,9 +19,13 @@ import { BossDuck } from "../objects/BossDuck";
 import { LAST_LEVEL, PowerConfig, levelAt, unlockedPowers } from "../data/levels";
 import { currentUser, recordResult } from "../data/accounts";
 import { recordRun } from "../data/scores";
-import { DUCK_KINDS, pickDuckKind, type DuckKindId } from "../data/ducks";
+import { DUCK_KINDS, pickDuckKind, type DuckKind, type DuckKindId } from "../data/ducks";
 import { RunTracker, lifetimeDucks } from "../data/achievements";
 import { getSettings, mods, type DifficultyMods } from "../data/settings";
+import { equippedCosmetic, themeAccent } from "../data/cosmetics";
+import { bankDeposit } from "../data/bank";
+import { recordRunStats, type RunSummary } from "../data/stats";
+import { applyRunToMissions } from "../data/missions";
 import {
   WEAPONS,
   equipWeapon,
@@ -57,6 +61,10 @@ export interface HudSnapshot {
   coins: number;
   weapon: string;
   boss: { hp: number; maxHp: number } | null;
+  crocMeter: number;
+  crocReady: boolean;
+  frenzy: boolean;
+  theme: number;
   powers: Record<PowerId, PowerState & { key: string; label: string; icon: string; durationMs: number; cooldownMs: number }>;
   now: number;
 }
@@ -91,9 +99,25 @@ export class GameScene extends Phaser.Scene {
   private coinsGranted = 0;
   private upgradeCounts: Record<string, number> = {};
 
+  private crocMeter = 0;
+  private crocReady = false;
+  private nextFrenzyAt = Rules.frenzyEvery;
+  private frenzyUntil = 0;
+  private infiniteAmmoUntil = 0;
+  private bushCooldownUntil = 0;
+  private cloudCooldownUntil = 0;
+  private bushes: Phaser.GameObjects.Image[] = [];
+  private clouds: Phaser.GameObjects.Image[] = [];
+
   private shotsFired = 0;
   private shotsHit = 0;
   private runBestCombo = 0;
+  private runStart = 0;
+  private runFrenzies = 0;
+  private runRampages = 0;
+  private runDecoysHit = 0;
+  private runPinatas = 0;
+  private runByKind: Partial<Record<DuckKindId, number>> = {};
 
   private reloading = false;
   private clearing = false;
@@ -133,8 +157,13 @@ export class GameScene extends Phaser.Scene {
     this.croc = new Croc(this);
 
     this.add.image(0, 0, "vignette").setOrigin(0).setDepth(90).setScrollFactor(0);
-    this.crosshair = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, "crosshair").setDepth(100);
+    const xhKey = `xh-${equippedCosmetic("crosshair")}`;
+    this.crosshair = this.add
+      .image(GAME_WIDTH / 2, GAME_HEIGHT / 2, this.textures.exists(xhKey) ? xhKey : "crosshair")
+      .setDepth(100);
     this.input.setDefaultCursor("none");
+
+    this.buildInteractiveScenery();
 
     this.scene.launch(Scenes.Hud);
     Audio.setBossMode(false);
@@ -150,6 +179,7 @@ export class GameScene extends Phaser.Scene {
     kb.on("keydown-ONE", () => this.activatePower(Power.Double));
     kb.on("keydown-TWO", () => this.activatePower(Power.Freeze));
     kb.on("keydown-THREE", () => this.activatePower(Power.Clear));
+    kb.on("keydown-Q", () => this.releaseCroc());
 
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
 
@@ -191,6 +221,11 @@ export class GameScene extends Phaser.Scene {
         bagAll: () => this.aliveDucks().forEach((d) => this.bagDuck(d)),
         hurtBoss: (n = 5) => this.boss?.hit(n),
         croc: (grin = false) => (grin ? this.croc.laugh(480) : this.croc.retrieve(480)),
+        frenzy: () => this.triggerFrenzy(),
+        fillCroc: () => {
+          this.crocMeter = 100;
+          this.crocReady = true;
+        },
         end: (win = false) => this.endGame(win),
       };
     }
@@ -218,9 +253,22 @@ export class GameScene extends Phaser.Scene {
     this.coins = 0;
     this.coinsGranted = 0;
     this.upgradeCounts = {};
+    this.crocMeter = 0;
+    this.crocReady = false;
+    this.nextFrenzyAt = Rules.frenzyEvery;
+    this.frenzyUntil = 0;
+    this.infiniteAmmoUntil = 0;
+    this.bushCooldownUntil = 0;
+    this.cloudCooldownUntil = 0;
     this.shotsFired = 0;
     this.shotsHit = 0;
     this.runBestCombo = 0;
+    this.runStart = this.time.now;
+    this.runFrenzies = 0;
+    this.runRampages = 0;
+    this.runDecoysHit = 0;
+    this.runPinatas = 0;
+    this.runByKind = {};
     this.reloading = false;
     this.clearing = false;
     this.paused = false;
@@ -263,10 +311,14 @@ export class GameScene extends Phaser.Scene {
     this.spawnDuck(pickDuckKind(this.levelIndex), Phaser.Math.Between(lvl.speed[0], lvl.speed[1]));
   }
 
-  private spawnDuck(kind = DUCK_KINDS.normal, rawSpeed = 130): Duck {
+  private spawnDuck(kind: DuckKind = DUCK_KINDS.normal, rawSpeed = 130, atX?: number): Duck {
     const duck = new Duck(this, rawSpeed * this.diff.speedMul, kind);
+    if (atX !== undefined && !kind.isDecoy) {
+      duck.x = Phaser.Math.Clamp(atX, 60, GAME_WIDTH - 60);
+      duck.y = GROUND_Y - 10;
+    }
     this.ducks.add(duck);
-    if (this.powers[Power.Freeze].active) duck.setSpeedMul(0.15);
+    if (this.powers[Power.Freeze].active && !kind.isDecoy) duck.setSpeedMul(0.15);
     duck.once("escaped", () => this.onDuckEscaped(duck));
     duck.once("bagged", () => this.onDuckBagged(duck));
 
@@ -275,10 +327,36 @@ export class GameScene extends Phaser.Scene {
       this.game.events.emit("dh:banner-mini", "¡PATO DORADO!");
     } else if (kind.id === "bomb") {
       this.game.events.emit("dh:banner-mini", "¡BOMBA!");
+    } else if (kind.id === "pinata") {
+      this.game.events.emit("dh:banner-mini", "¡PIÑATA!");
     }
-    const puff = this.add.image(duck.x, GROUND_Y + 2, "puff").setDepth(18);
-    this.tweens.add({ targets: puff, scale: 1.4, alpha: 0, duration: 260, onComplete: () => puff.destroy() });
+
+    if (!kind.isDecoy) {
+      const puff = this.add.image(duck.x, GROUND_Y + 2, "puff").setDepth(18);
+      this.tweens.add({ targets: puff, scale: 1.4, alpha: 0, duration: 260, onComplete: () => puff.destroy() });
+    }
     return duck;
+  }
+
+  private buildInteractiveScenery(): void {
+    this.bushes = [];
+    this.clouds = [];
+    for (let i = 0; i < 3; i++) {
+      const b = this.add
+        .image(GAME_WIDTH * (0.2 + i * 0.3) + Phaser.Math.Between(-30, 30), GROUND_Y + 10, "bush")
+        .setOrigin(0.5, 1)
+        .setDepth(17)
+        .setScale(0.9);
+      this.bushes.push(b);
+    }
+    for (let i = 0; i < 2; i++) {
+      const c = this.add
+        .image(GAME_WIDTH * (0.3 + i * 0.4), Phaser.Math.Between(80, 150), "cloud0")
+        .setDepth(-40)
+        .setScale(1.1)
+        .setAlpha(0.9);
+      this.clouds.push(c);
+    }
   }
 
   private aliveDucks(): Duck[] {
@@ -305,7 +383,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.lastShotAt = this.time.now;
-    this.ammo--;
+    const infinite = this.time.now < this.infiniteAmmoUntil;
+    if (!infinite) this.ammo--;
     this.shotsFired++;
     this.fireSound();
     this.muzzleFlash(p.x, p.y);
@@ -315,11 +394,24 @@ export class GameScene extends Phaser.Scene {
     const ax = p.x + (wob ? Phaser.Math.Between(-wob, wob) : 0);
     const ay = p.y + (wob ? Phaser.Math.Between(-wob, wob) : 0);
 
-    if (this.weapon.pellets > 1) this.fireSpread(ax, ay);
-    else this.fireSingle(ax, ay);
+    // shooting the crocodile — bad idea
+    if (this.croc.visible && this.inflatedBounds(this.croc).contains(ax, ay)) {
+      this.shootCroc();
+      this.syncHud();
+      return;
+    }
 
-    if (this.ammo === 0) this.tracker.ranDry();
-    if (this.ammo <= 0) this.reload();
+    const resolved = this.weapon.pellets > 1 ? this.fireSpread(ax, ay) : this.fireSingle(ax, ay);
+    if (!resolved) {
+      this.onMiss();
+      this.tracker.missedShot();
+      this.checkScenery(ax, ay);
+    }
+
+    if (!infinite) {
+      if (this.ammo === 0) this.tracker.ranDry();
+      if (this.ammo <= 0) this.reload();
+    }
     this.syncHud();
   }
 
@@ -343,32 +435,34 @@ export class GameScene extends Phaser.Scene {
     return b;
   }
 
-  private fireSingle(x: number, y: number): void {
+  /** Returns true if the shot resolved on a real target / special; false = clean miss. */
+  private fireSingle(x: number, y: number): boolean {
     if (this.boss?.alive && this.inflatedBounds(this.boss).contains(x, y)) {
       this.hitBoss(this.weapon.heavy ? 3 : 1, x, y);
-      return;
+      return true;
     }
     const target = this.aliveDucks()
       .filter((d) => this.inflatedBounds(d).contains(x, y))
       .sort((a, b) => b.bornAt - a.bornAt)[0];
+    if (!target) return false;
 
-    if (target) {
-      this.shotsHit++;
-      if (this.weapon.heavy) {
-        target.bag();
-        this.bagDuck(target, true);
-      } else {
-        const killed = target.hit();
-        if (killed) this.bagDuck(target);
-        else this.woundDuck(target);
-      }
-    } else {
-      this.onMiss();
-      this.tracker.missedShot();
+    if (target.kind.isDecoy) {
+      this.shootDecoy(target);
+      return true;
     }
+    this.shotsHit++;
+    if (this.weapon.heavy) {
+      target.bag();
+      this.bagDuck(target, true);
+    } else {
+      const killed = target.hit();
+      if (killed) this.bagDuck(target);
+      else this.woundDuck(target);
+    }
+    return true;
   }
 
-  private fireSpread(cx: number, cy: number): void {
+  private fireSpread(cx: number, cy: number): boolean {
     const rings = [0, 26, 52];
     const points: Array<[number, number]> = [[cx, cy]];
     for (let i = 1; i < this.weapon.pellets; i++) {
@@ -377,8 +471,10 @@ export class GameScene extends Phaser.Scene {
       points.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
     }
 
+    let resolved = false;
     if (this.boss?.alive && points.some(([x, y]) => this.inflatedBounds(this.boss!).contains(x, y))) {
       this.hitBoss(2, cx, cy);
+      resolved = true;
     }
 
     const hit = new Set<Duck>();
@@ -387,11 +483,14 @@ export class GameScene extends Phaser.Scene {
         if (!hit.has(d) && this.inflatedBounds(d).contains(x, y)) hit.add(d);
       }
     }
-    if (hit.size === 0) {
-      this.onMiss();
-      this.tracker.missedShot();
-      return;
+    for (const d of hit) {
+      if (d.kind.isDecoy) {
+        this.shootDecoy(d);
+        return true;
+      }
     }
+    if (hit.size === 0) return resolved;
+
     this.shotsHit++;
     let i = 0;
     for (const d of hit) {
@@ -402,16 +501,29 @@ export class GameScene extends Phaser.Scene {
         else this.woundDuck(d);
       });
     }
+    return true;
   }
 
   private bagDuck(duck: Duck, heavy = false): void {
     const kind = duck.kind;
+    if (kind.isDecoy) return; // never counts, safety for AOE paths
     duck.bag();
 
+    this.runByKind[kind.id] = (this.runByKind[kind.id] ?? 0) + 1;
     this.combo++;
     this.runBestCombo = Math.max(this.runBestCombo, this.combo);
     this.multiplier = Phaser.Math.Clamp(1 + Math.floor((this.combo - 1) / 2), 1, Rules.maxComboMultiplier);
     this.comboTimer = this.comboWindow();
+
+    // fill the crocodile ultimate meter
+    if (!this.crocReady) {
+      this.crocMeter = Math.min(100, this.crocMeter + Rules.crocMeterPerBag);
+      if (this.crocMeter >= 100) {
+        this.crocReady = true;
+        Audio.powerup();
+        this.game.events.emit("dh:banner-mini", "COCODRILO LISTO · Q");
+      }
+    }
 
     const speedBonus = 1 + Phaser.Math.Clamp((duck.speed - 90) / 260, 0, 1.2);
     const doubleMul = this.powers[Power.Double].active ? 2 : 1;
@@ -431,9 +543,188 @@ export class GameScene extends Phaser.Scene {
 
     if (kind.explodeOnBag) this.bombExplode(duck);
     if (kind.id === "golden") this.flash(C.gold, 0.4);
+    if (kind.dropsLoot) {
+      this.runPinatas++;
+      this.dropLoot(duck.x, duck.y);
+    }
     if (this.multiplier >= 2) this.game.events.emit("dh:combo", this.multiplier * doubleMul);
 
+    if (this.combo >= this.nextFrenzyAt) {
+      this.nextFrenzyAt += Rules.frenzyEvery;
+      this.triggerFrenzy();
+    }
+
     this.maybeAdvanceLevel();
+  }
+
+  // ── decoy / crocodile / scenery ──────────────────────────────────
+
+  private shootDecoy(d: Duck): void {
+    this.runDecoysHit++;
+    this.combo = 0;
+    this.multiplier = 1;
+    this.comboTimer = 0;
+    this.nextFrenzyAt = Rules.frenzyEvery;
+    this.addScore(-Math.min(this.score, Rules.decoyPenalty));
+    this.tracker.missedShot();
+    Audio.wrong();
+    this.flash(C.blood, 0.32);
+    this.doShake(120, 0.006);
+    this.game.events.emit("dh:banner-mini", "¡SEÑUELO! -" + Rules.decoyPenalty);
+    this.croc.laugh(Phaser.Math.Between(200, GAME_WIDTH - 200));
+    const puff = this.add.image(d.x, d.y, "puff").setDepth(30);
+    this.tweens.add({ targets: puff, scale: 2, alpha: 0, duration: 260, onComplete: () => puff.destroy() });
+    d.destroy();
+    this.syncHud();
+  }
+
+  private shootCroc(): void {
+    this.croc.anger(7000);
+    this.combo = 0;
+    this.multiplier = 1;
+    this.comboTimer = 0;
+    this.nextFrenzyAt = Rules.frenzyEvery;
+    this.crocMeter = 0;
+    this.crocReady = false;
+    this.addScore(-Math.min(this.score, 100));
+    this.tracker.missedShot();
+    Audio.taunt();
+    this.doShake(160, 0.008);
+    this.game.events.emit("dh:banner-mini", "¡NO LE DISPARES AL COCODRILO!");
+  }
+
+  private checkScenery(x: number, y: number): void {
+    const now = this.time.now;
+    const bush = this.bushes.find((b) => b.getBounds().contains(x, y));
+    if (bush && now >= this.bushCooldownUntil) {
+      this.bushCooldownUntil = now + 4500;
+      this.tweens.add({ targets: bush, angle: { from: -6, to: 0 }, duration: 260, ease: "quad.out" });
+      const leaves = this.add.image(bush.x, bush.y - 20, "feather").setTint(C.foliage).setDepth(30);
+      this.tweens.add({ targets: leaves, y: leaves.y - 24, alpha: 0, duration: 400, onComplete: () => leaves.destroy() });
+      if (Math.random() < 0.6 && !this.clearing && !this.gameEnded) {
+        const kind = Math.random() < 0.35 ? DUCK_KINDS.fast : DUCK_KINDS.normal;
+        this.spawnDuck(kind, 190, bush.x);
+        this.game.events.emit("dh:banner-mini", "¡PATO ESCONDIDO!");
+      }
+      return;
+    }
+    const cloud = this.clouds.find((c) => c.getBounds().contains(x, y));
+    if (cloud && now >= this.cloudCooldownUntil) {
+      this.cloudCooldownUntil = now + 6000;
+      this.tweens.add({ targets: cloud, scaleY: 0.7, yoyo: true, duration: 160 });
+      if (this.weather.kind === "clear") {
+        this.weather.destroy();
+        this.weather = new Weather(this, "rain");
+        this.game.events.emit("dh:banner-mini", "¡LLUVIA!");
+      } else {
+        const n = Phaser.Math.Between(2, 4);
+        this.coins += n;
+        for (let i = 0; i < n; i++) this.coinFly(cloud.x + Phaser.Math.Between(-20, 20), cloud.y);
+        Audio.loot();
+      }
+    }
+  }
+
+  private dropLoot(x: number, y: number): void {
+    const n = Phaser.Math.Between(3, 7);
+    this.coins += n;
+    Audio.loot();
+    this.scorePopup(x, y - 16, n, 1);
+    for (let i = 0; i < n; i++) this.coinFly(x + Phaser.Math.Between(-24, 24), y + Phaser.Math.Between(-12, 12));
+    // confetti
+    for (let i = 0; i < 8; i++) {
+      const s = this.add.image(x, y, "star").setDepth(41).setScale(Phaser.Math.FloatBetween(0.5, 1.1)).setTint(Phaser.Display.Color.RandomRGB().color);
+      const a = Math.random() * Math.PI * 2;
+      this.tweens.add({
+        targets: s,
+        x: x + Math.cos(a) * Phaser.Math.Between(40, 90),
+        y: y + Math.sin(a) * Phaser.Math.Between(40, 90) + 30,
+        alpha: 0,
+        angle: Phaser.Math.Between(-200, 200),
+        duration: Phaser.Math.Between(500, 800),
+        onComplete: () => s.destroy(),
+      });
+    }
+    if (Math.random() < 0.28) {
+      const locked = (Object.keys(this.powers) as PowerId[]).filter(
+        (p) => this.powers[p].unlocked && this.time.now < this.powers[p].cooldownUntil,
+      );
+      if (locked.length) {
+        this.powers[locked[Phaser.Math.Between(0, locked.length - 1)]].cooldownUntil = 0;
+        this.game.events.emit("dh:banner-mini", "¡PODER RECARGADO!");
+      }
+    }
+  }
+
+  private coinFly(x: number, y: number): void {
+    const c = this.add.image(x, y, "coin").setDepth(60).setScale(1.1);
+    this.tweens.add({
+      targets: c,
+      x: 60,
+      y: GAME_HEIGHT - 20,
+      scale: 0.5,
+      duration: Phaser.Math.Between(420, 700),
+      ease: "quad.in",
+      delay: Phaser.Math.Between(0, 160),
+      onComplete: () => c.destroy(),
+    });
+  }
+
+  private triggerFrenzy(): void {
+    this.runFrenzies++;
+    this.frenzyUntil = this.time.now + Rules.frenzyMs;
+    Audio.frenzy();
+    this.flash(C.gold, 0.5);
+    this.doShake(220, 0.006);
+    this.game.events.emit("dh:frenzy");
+
+    const roll = Phaser.Math.Between(0, 2);
+    if (roll === 0) {
+      this.infiniteAmmoUntil = this.time.now + Rules.frenzyMs;
+      this.ammo = this.magazine;
+      this.reloading = false;
+      this.game.events.emit("dh:banner", { big: "¡FRENESÍ!", small: "BALA INFINITA" });
+    } else if (roll === 1) {
+      this.startSlowmo(Rules.frenzyMs);
+      this.game.events.emit("dh:banner", { big: "¡FRENESÍ!", small: "CÁMARA LENTA" });
+    } else {
+      this.game.events.emit("dh:banner", { big: "¡FRENESÍ!", small: "LLUVIA DE PATOS" });
+      for (let i = 0; i < 5; i++) {
+        this.time.delayedCall(i * 160, () => {
+          if (!this.clearing && !this.gameEnded) {
+            this.spawnDuck(Math.random() < 0.4 ? DUCK_KINDS.pinata : DUCK_KINDS.normal, 150);
+          }
+        });
+      }
+    }
+    this.syncHud();
+  }
+
+  private releaseCroc(): void {
+    Audio.unlock();
+    if (!this.crocReady || this.paused || this.gameEnded || this.croc.isAngry()) {
+      Audio.dryFire();
+      return;
+    }
+    this.crocReady = false;
+    this.crocMeter = 0;
+    this.runRampages++;
+    Audio.rampage();
+    this.flash(0xffffff, 0.5);
+    this.doShake(500, 0.014);
+    this.game.events.emit("dh:banner", { big: "¡COCODRILO!", small: "arrasa el estanque" });
+    this.croc.rampage(
+      (cx) => this.crocSweepAt(cx),
+      () => this.syncHud(),
+    );
+  }
+
+  private crocSweepAt(cx: number): void {
+    this.aliveDucks().forEach((d) => {
+      if (d.kind.isDecoy) return;
+      if (Math.abs(d.x - cx) < 130 && d.y > GROUND_Y - 220) this.bagDuck(d);
+    });
+    if (this.boss?.alive && Math.abs(this.boss.x - cx) < 170) this.boss.hit(0.6);
   }
 
   private woundDuck(duck: Duck): void {
@@ -496,6 +787,7 @@ export class GameScene extends Phaser.Scene {
     this.combo = 0;
     this.multiplier = 1;
     this.comboTimer = 0;
+    this.nextFrenzyAt = Rules.frenzyEvery;
     this.tweens.add({ targets: this.crosshair, angle: { from: -12, to: 0 }, duration: 180, ease: "quad.out" });
     this.crosshair.setTint(0xff5555);
     this.time.delayedCall(120, () => this.crosshair.clearTint());
@@ -525,11 +817,12 @@ export class GameScene extends Phaser.Scene {
   private onDuckEscaped(duck: Duck): void {
     const kind = duck.kind;
     duck.destroy();
-    if (this.clearing || this.gameEnded) return;
+    if (kind.isDecoy || this.clearing || this.gameEnded) return; // a decoy leaving is correct play
 
     this.combo = 0;
     this.multiplier = 1;
     this.comboTimer = 0;
+    this.nextFrenzyAt = Rules.frenzyEvery;
     const penalty = this.diff.escapeCostsLife ? kind.escapePenalty : 0;
     this.lives -= penalty;
     if (penalty > 0) this.tracker.lostLife();
@@ -585,6 +878,7 @@ export class GameScene extends Phaser.Scene {
       this.combo = 0;
       this.multiplier = 1;
       this.comboTimer = 0;
+      this.nextFrenzyAt = Rules.frenzyEvery;
 
       this.bg.destroy();
       this.bg = new Parallax(this, next.timeOfDay);
@@ -808,6 +1102,8 @@ export class GameScene extends Phaser.Scene {
   private endGame(win: boolean): void {
     if (this.gameEnded) return;
     this.gameEnded = true;
+    if (this.scene.isActive(Scenes.Shop)) this.scene.stop(Scenes.Shop);
+    if (this.scene.isPaused()) this.scene.resume();
     this.tracker.gameEnded(win, this.levelIndex);
     this.spawnEvent?.remove();
     this.minionEvent?.remove();
@@ -821,6 +1117,26 @@ export class GameScene extends Phaser.Scene {
       recordResult(user.name, this.score, this.levelIndex);
       recordRun({ name: user.name, score: this.score, level: this.levelIndex, date: Date.now() });
     }
+
+    const summary: RunSummary = {
+      score: this.score,
+      win,
+      level: this.levelIndex,
+      maxCombo: this.runBestCombo,
+      shots: this.shotsFired,
+      hits: this.shotsHit,
+      playtimeMs: this.time.now - this.runStart,
+      decoysHit: this.runDecoysHit,
+      pinatas: this.runPinatas,
+      frenzies: this.runFrenzies,
+      rampages: this.runRampages,
+      ducksByKind: this.runByKind,
+      weapon: this.weapon.id,
+    };
+    recordRunStats(summary);
+    const missionsDone = applyRunToMissions(summary);
+    const banked = this.coins;
+    bankDeposit(this.coins);
 
     if (win) Audio.levelUp();
     else Audio.gameOver();
@@ -836,6 +1152,8 @@ export class GameScene extends Phaser.Scene {
         newAchievements,
         accuracy: acc,
         bestCombo: this.runBestCombo,
+        banked,
+        missionsDone,
       });
     });
   }
@@ -974,6 +1292,10 @@ export class GameScene extends Phaser.Scene {
       coins: this.coins,
       weapon: this.weapon.label,
       boss: this.boss ? { hp: this.boss.hp, maxHp: this.boss.maxHp } : null,
+      crocMeter: this.crocMeter,
+      crocReady: this.crocReady,
+      frenzy: this.time.now < this.frenzyUntil,
+      theme: themeAccent(),
       powers,
       now: this.time.now,
     };
@@ -1021,7 +1343,14 @@ export class GameScene extends Phaser.Scene {
         }
         this.combo = 0;
         this.multiplier = 1;
+        this.nextFrenzyAt = Rules.frenzyEvery;
       }
+    }
+
+    // drifting shootable clouds
+    for (const c of this.clouds) {
+      c.x -= 8 * (scaled / 1000);
+      if (c.x < -c.displayWidth) c.x = GAME_WIDTH + c.displayWidth * 0.5;
     }
 
     this.syncHud();

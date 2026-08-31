@@ -6,11 +6,13 @@
  *   armored  steel-plated, takes two hits
  *   golden   rare jackpot — huge points + a burst of slow-motion
  *   bomb     shoot it to blow up nearby ducks; letting it escape hurts twice as much
+ *   pinata   pop it for a shower of coins (and sometimes a power-up refresh)
+ *   decoy    a rubber duck — do NOT shoot it, that costs points and the combo
  */
 
 import { Palette as C } from "../art/palette";
 
-export type DuckKindId = "normal" | "fast" | "armored" | "golden" | "bomb";
+export type DuckKindId = "normal" | "fast" | "armored" | "golden" | "bomb" | "pinata" | "decoy";
 
 export interface DuckKind {
   id: DuckKindId;
@@ -30,6 +32,9 @@ export interface DuckKind {
   pulse?: boolean;
   slowmoOnBag?: boolean;
   explodeOnBag?: boolean;
+  dropsLoot?: boolean;
+  /** not a real target: shooting it is punished */
+  isDecoy?: boolean;
   label?: string;
 }
 
@@ -71,15 +76,37 @@ export const DUCK_KINDS: Record<DuckKindId, DuckKind> = {
     explodeOnBag: true,
     label: "BOMBA",
   },
+  pinata: {
+    id: "pinata",
+    tint: 0xff5fb0,
+    scale: 1.05,
+    speedMul: 1.1,
+    hp: 1,
+    pointsMul: 1,
+    escapePenalty: 1,
+    dropsLoot: true,
+    label: "¡PIÑATA!",
+  },
+  decoy: {
+    id: "decoy",
+    tint: 0xffffff,
+    scale: 0.9,
+    speedMul: 0.5,
+    hp: 1,
+    pointsMul: 0,
+    escapePenalty: 0,
+    isDecoy: true,
+    label: "SEÑUELO",
+  },
 };
 
 /** Spawn weights per level. Missing kinds simply never appear that level. */
 const TABLE: Record<number, Partial<Record<DuckKindId, number>>> = {
-  1: { normal: 100 },
-  2: { normal: 80, fast: 17, golden: 3 },
-  3: { normal: 64, fast: 20, armored: 13, golden: 3 },
-  4: { normal: 50, fast: 22, armored: 16, bomb: 9, golden: 3 },
-  5: { normal: 40, fast: 22, armored: 18, bomb: 14, golden: 6 },
+  1: { normal: 92, pinata: 8 },
+  2: { normal: 68, fast: 15, pinata: 9, decoy: 6, golden: 2 },
+  3: { normal: 52, fast: 18, armored: 12, pinata: 8, decoy: 7, golden: 3 },
+  4: { normal: 40, fast: 20, armored: 15, bomb: 9, pinata: 7, decoy: 6, golden: 3 },
+  5: { normal: 32, fast: 20, armored: 17, bomb: 13, pinata: 6, decoy: 6, golden: 6 },
 };
 
 export function pickDuckKind(level: number): DuckKind {

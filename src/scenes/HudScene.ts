@@ -24,6 +24,10 @@ export class HudScene extends Phaser.Scene {
   private bossBarBg!: Phaser.GameObjects.Rectangle;
   private bossBarFill!: Phaser.GameObjects.Rectangle;
   private bossLabel!: Phaser.GameObjects.Text;
+  private crocBarFill!: Phaser.GameObjects.Rectangle;
+  private crocIcon!: Phaser.GameObjects.Image;
+  private crocKey!: Phaser.GameObjects.Text;
+  private frenzyEdge!: Phaser.GameObjects.Rectangle;
   private banner!: Phaser.GameObjects.Container;
   private bannerBig!: Phaser.GameObjects.Text;
   private bannerSmall!: Phaser.GameObjects.Text;
@@ -59,6 +63,22 @@ export class HudScene extends Phaser.Scene {
     this.weaponText = this.add
       .text(GAME_WIDTH - 24, 74, "", { fontFamily: FONT_FAMILY, fontSize: "8px", color: css(C.paperShade) })
       .setOrigin(1, 0.5);
+
+    // crocodile ultimate meter (bottom-left, above the coins)
+    const cy = this.scale.height - 52;
+    this.crocIcon = this.add.image(6, cy, "croc", 0).setScale(0.4).setOrigin(0, 0.5);
+    this.add.rectangle(46, cy, 120, 10, C.ink, 0.55).setOrigin(0, 0.5);
+    this.crocBarFill = this.add.rectangle(48, cy, 4, 6, 0x4f7d3f).setOrigin(0, 0.5);
+    this.crocKey = this.add
+      .text(172, cy, "[Q]", { fontFamily: FONT_FAMILY, fontSize: "9px", color: css(C.gold) })
+      .setOrigin(0, 0.5)
+      .setVisible(false);
+
+    // frenzy screen-edge glow
+    this.frenzyEdge = this.add
+      .rectangle(GAME_WIDTH / 2, this.scale.height / 2, GAME_WIDTH - 8, this.scale.height - 8, 0x000000, 0)
+      .setStrokeStyle(8, C.gold, 0.9)
+      .setVisible(false);
 
     // boss health bar (hidden unless a boss is present)
     this.bossBarBg = this.add.rectangle(GAME_WIDTH / 2, 118, 440, 16, C.ink, 0.75).setStrokeStyle(2, C.blood).setVisible(false);
@@ -242,8 +262,26 @@ export class HudScene extends Phaser.Scene {
 
     this.scoreText.setText(s.score.toLocaleString("es"));
     this.levelText.setText(`NIVEL ${s.level} · ${s.levelName}`);
-    this.coinText.setText(`MONEDAS ${s.coins}`);
+    this.coinText.setText(`MONEDAS ${s.coins}`).setColor(css(s.theme));
     this.weaponText.setText(s.weapon.toUpperCase());
+    this.barFill.setFillStyle(s.theme);
+
+    // crocodile ultimate meter
+    const cm = Phaser.Math.Clamp(s.crocMeter / 100, 0, 1);
+    this.crocBarFill.width = 4 + cm * 108;
+    this.crocKey.setVisible(s.crocReady);
+    if (s.crocReady) {
+      const pulse = 0.6 + 0.4 * Math.sin(s.now / 120);
+      this.crocBarFill.setFillStyle(s.theme).setAlpha(pulse);
+      this.crocIcon.setAlpha(pulse).setTint(0xffffff);
+    } else {
+      this.crocBarFill.setFillStyle(0x4f7d3f).setAlpha(1);
+      this.crocIcon.setAlpha(0.6).setTint(0x6a6a6a);
+    }
+
+    // frenzy glow
+    this.frenzyEdge.setVisible(s.frenzy);
+    if (s.frenzy) this.frenzyEdge.setStrokeStyle(8, s.theme, 0.5 + 0.4 * Math.sin(s.now / 90));
 
     // boss bar
     const boss = s.boss;
@@ -271,14 +309,14 @@ export class HudScene extends Phaser.Scene {
     this.reloadText.setVisible(s.reloading && Math.floor(s.now / 200) % 2 === 0);
 
     // multiplier + combo decay meter
-    this.multText.setText(s.multiplier > 1 ? `x${s.multiplier}` : "");
+    this.multText.setText(s.multiplier > 1 ? `x${s.multiplier}` : "").setColor(css(s.theme));
     const showCombo = s.combo >= 2;
     this.comboBarBg.setVisible(showCombo);
     this.comboBar.setVisible(showCombo);
     if (showCombo) {
       const frac = Phaser.Math.Clamp(s.comboTimer / Math.max(1, s.comboWindow), 0, 1);
       this.comboBar.width = 92 * frac;
-      this.comboBar.setFillStyle(frac < 0.25 ? C.blood : frac < 0.5 ? C.goldDeep : C.gold);
+      this.comboBar.setFillStyle(frac < 0.25 ? C.blood : frac < 0.5 ? C.goldDeep : s.theme);
     }
 
     // powers

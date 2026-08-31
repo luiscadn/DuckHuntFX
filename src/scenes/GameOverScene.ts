@@ -13,6 +13,8 @@ interface OverData {
   newAchievements?: string[];
   accuracy?: number;
   bestCombo?: number;
+  banked?: number;
+  missionsDone?: string[];
 }
 
 export class GameOverScene extends Phaser.Scene {
@@ -104,6 +106,21 @@ export class GameOverScene extends Phaser.Scene {
           wordWrap: { width: 300 },
         })
         .setOrigin(0, 0.5);
+    }
+
+    const banked = this.params.banked ?? 0;
+    const md = this.params.missionsDone ?? [];
+    if (banked > 0 || md.length) {
+      const bits = [];
+      if (banked > 0) bits.push(`+${banked} al banco`);
+      if (md.length) bits.push(`${md.length} misión${md.length > 1 ? "es" : ""} completada${md.length > 1 ? "s" : ""}`);
+      this.add
+        .text(cx, gained.length ? 331 : 318, bits.join("   ·   "), {
+          fontFamily: FONT_FAMILY,
+          fontSize: "8px",
+          color: css(C.foliageLight),
+        })
+        .setOrigin(0.5);
     }
 
     new PixelButton(this, cx - 128, 366, "REINTENTAR", {

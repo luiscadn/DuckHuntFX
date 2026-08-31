@@ -8,6 +8,9 @@ import { MenuScene } from "./scenes/MenuScene";
 import { ScoresScene } from "./scenes/ScoresScene";
 import { AchievementsScene } from "./scenes/AchievementsScene";
 import { SettingsScene } from "./scenes/SettingsScene";
+import { StatsScene } from "./scenes/StatsScene";
+import { MissionsScene } from "./scenes/MissionsScene";
+import { CosmeticsScene } from "./scenes/CosmeticsScene";
 import { ShopScene } from "./scenes/ShopScene";
 import { GameScene } from "./scenes/GameScene";
 import { HudScene } from "./scenes/HudScene";
@@ -44,6 +47,9 @@ new Phaser.Game({
     ScoresScene,
     AchievementsScene,
     SettingsScene,
+    StatsScene,
+    MissionsScene,
+    CosmeticsScene,
     GameScene,
     HudScene,
     ShopScene, // overlay — must sit above Game + Hud in the render order

@@ -512,6 +512,115 @@ function buildBoss(tm: TM): void {
   registerSheet(tm, "boss", W, H, 2, (ctx, i) => paint(ctx, i === 0));
 }
 
+function buildExtras(tm: TM): void {
+  // rubber decoy duck — do not shoot
+  {
+    const s = surface(32, 26);
+    const ctx = s.ctx;
+    ellipse(ctx, 14, 17, 12, 8, 0xffd23f);
+    ellipse(ctx, 14, 20, 9, 4, 0xe0a92a);
+    ellipse(ctx, 20, 10, 6, 5, 0xffd23f); // head
+    fillPoly(ctx, [[24, 9], [31, 10], [31, 14], [24, 14]], 0xf28c1e); // bill
+    circle(ctx, 21, 9, 1.5, C.ink);
+    ctx.globalAlpha = 0.5;
+    ellipse(ctx, 11, 13, 5, 2, 0xffffff);
+    ctx.globalAlpha = 1;
+    register(tm, "duck-decoy", s);
+  }
+  // coin (loot)
+  {
+    const s = surface(16, 16);
+    const ctx = s.ctx;
+    circle(ctx, 8, 8, 7, C.goldDeep);
+    circle(ctx, 8, 8, 5, C.gold);
+    line(ctx, 8, 4, 8, 12, C.goldDeep, 2);
+    register(tm, "coin", s);
+  }
+
+  // crosshair variants (xh-<id>) — classic mirrors the default reticle
+  const xhBase = (ctx: CanvasRenderingContext2D, ring: number, tick: number) => {
+    ctx.strokeStyle = "#161327";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(22, 22, ring, 0, Math.PI * 2);
+    ctx.stroke();
+    for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
+      line(ctx, 22 + dx * (ring - 5), 22 + dy * (ring - 5), 22 + dx * tick, 22 + dy * tick, tick > 0 ? 0x161327 : 0x161327, 3);
+    }
+  };
+  {
+    const s = surface(44, 44);
+    xhBase(s.ctx, 13, 20);
+    s.ctx.strokeStyle = "#c8322b";
+    s.ctx.lineWidth = 2;
+    s.ctx.beginPath();
+    s.ctx.arc(22, 22, 13, 0, Math.PI * 2);
+    s.ctx.stroke();
+    circle(s.ctx, 22, 22, 2, C.blood);
+    register(tm, "xh-classic", s);
+  }
+  {
+    const s = surface(44, 44);
+    circle(s.ctx, 22, 22, 4, 0x3a7d3c);
+    circle(s.ctx, 22, 22, 2, 0x8fd06a);
+    for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
+      line(s.ctx, 22 + dx * 8, 22 + dy * 8, 22 + dx * 16, 22 + dy * 16, 0x3a7d3c, 2);
+    }
+    register(tm, "xh-dot", s);
+  }
+  {
+    const s = surface(44, 44);
+    s.ctx.strokeStyle = "#e0952a";
+    s.ctx.lineWidth = 3;
+    s.ctx.beginPath();
+    s.ctx.arc(22, 22, 15, 0, Math.PI * 2);
+    s.ctx.stroke();
+    s.ctx.strokeStyle = "#ffd447";
+    s.ctx.lineWidth = 2;
+    s.ctx.beginPath();
+    s.ctx.arc(22, 22, 9, 0, Math.PI * 2);
+    s.ctx.stroke();
+    circle(s.ctx, 22, 22, 1.6, C.gold);
+    register(tm, "xh-ring", s);
+  }
+  {
+    const s = surface(44, 44);
+    const ctx = s.ctx;
+    circle(ctx, 22, 20, 8, C.paper);
+    fillPoly(ctx, [[16, 26], [28, 26], [26, 32], [18, 32]], C.paper);
+    circle(ctx, 19, 20, 2, C.ink);
+    circle(ctx, 25, 20, 2, C.ink);
+    rect(ctx, 20, 25, 1.6, 4, C.ink);
+    rect(ctx, 23, 25, 1.6, 4, C.ink);
+    register(tm, "xh-skull", s);
+  }
+
+  // croc hats (hat-<id>) — drawn centred, origin used as (0.5, 1) by the croc
+  {
+    const s = surface(30, 26);
+    const ctx = s.ctx;
+    rect(ctx, 3, 20, 24, 4, C.ink); // brim
+    rect(ctx, 8, 2, 14, 20, C.ink); // stovepipe
+    rect(ctx, 8, 13, 14, 3, C.blood); // band
+    register(tm, "hat-top", s);
+  }
+  {
+    const s = surface(26, 26);
+    fillPoly(s.ctx, [[13, 1], [3, 24], [23, 24]], 0x4fb4d8);
+    fillPoly(s.ctx, [[13, 1], [9, 12], [17, 12]], C.gold);
+    circle(s.ctx, 13, 2, 2.4, C.blood);
+    register(tm, "hat-party", s);
+  }
+  {
+    const s = surface(30, 20);
+    const ctx = s.ctx;
+    fillPoly(ctx, [[3, 18], [3, 6], [9, 12], [15, 2], [21, 12], [27, 6], [27, 18]], C.gold);
+    rect(ctx, 3, 16, 24, 4, C.goldDeep);
+    circle(ctx, 15, 6, 2, C.blood);
+    register(tm, "hat-crown", s);
+  }
+}
+
 /** Entry point — call once from BootScene. */
 export function generateAllTextures(tm: TM): void {
   buildDuck(tm);
@@ -522,6 +631,7 @@ export function generateAllTextures(tm: TM): void {
   buildHudIcons(tm);
   buildPowerIcons(tm);
   buildBadges(tm);
+  buildExtras(tm);
 }
 
 export const DuckFrame = { W: DUCK_W, H: DUCK_H };

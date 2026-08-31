@@ -20,6 +20,9 @@ export const Scenes = {
   Scores: "Scores",
   Achievements: "Achievements",
   Settings: "Settings",
+  Stats: "Stats",
+  Missions: "Missions",
+  Cosmetics: "Cosmetics",
   Shop: "Shop",
   Game: "Game",
   Hud: "Hud",
@@ -35,6 +38,9 @@ export const StoreKeys = {
   achievements: "dh:achievements",
   stats: "dh:stats",
   weapons: "dh:weapons",
+  bank: "dh:bank",
+  missions: "dh:missions",
+  cosmetics: "dh:cosmetics",
 } as const;
 
 /** Core gameplay rules (arcade light-gun shooter, tuned for feel). */
@@ -51,6 +57,12 @@ export const Rules = {
   // multiplier climbs so high combos take more discipline to hold.
   comboWindowMs: 2800,
   comboWindowMinMs: 1500,
+  // a frenzy fires every N consecutive bags (10, 20, 30, ...)
+  frenzyEvery: 10,
+  frenzyMs: 3000,
+  // crocodile "ultimate": meter 0..100, fills as you bag ducks
+  crocMeterPerBag: 7,
+  decoyPenalty: 250,
 } as const;
 
 /** Power-up identifiers, shared by data + HUD + game logic. */

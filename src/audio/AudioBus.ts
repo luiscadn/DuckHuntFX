@@ -209,6 +209,30 @@ class AudioBus {
     this.tone({ freq: 220, to: 60, dur: 0.07, type: "square", vol: 0.24 });
     this.noise({ dur: 0.06, vol: 0.26, type: "lowpass", freq: 1600, to: 200 });
   }
+  /** shot a decoy — a buzzer. */
+  wrong(): void {
+    this.tone({ freq: 160, dur: 0.16, type: "square", vol: 0.3 });
+    this.tone({ freq: 150, dur: 0.16, type: "sawtooth", vol: 0.2, delay: 0.02 });
+  }
+  /** loot burst from a piñata. */
+  loot(): void {
+    for (let i = 0; i < 5; i++) {
+      this.tone({ freq: 660 + i * 120, dur: 0.06, type: "square", vol: 0.16, delay: i * 0.04 });
+    }
+  }
+  /** combo frenzy trigger — rising fanfare. */
+  frenzy(): void {
+    for (let i = 0; i < 6; i++) {
+      this.tone({ freq: 392 * Math.pow(1.18, i), dur: 0.1, type: "square", vol: 0.22, delay: i * 0.05 });
+    }
+    this.tone({ freq: 392 * Math.pow(1.18, 6), dur: 0.4, type: "triangle", vol: 0.18, delay: 0.32 });
+  }
+  /** crocodile ultimate — a big splash + a roar. */
+  rampage(): void {
+    this.noise({ dur: 0.6, vol: 0.5, type: "lowpass", freq: 1800, to: 90 });
+    this.tone({ freq: 110, to: 40, dur: 0.5, type: "sawtooth", vol: 0.3 });
+    this.tone({ freq: 70, to: 32, dur: 0.55, type: "square", vol: 0.22, delay: 0.05 });
+  }
   levelUp(): void {
     const notes = [523, 659, 784, 1047];
     notes.forEach((f, i) => this.tone({ freq: f, dur: 0.16, type: "square", vol: 0.24, delay: i * 0.11 }));
