@@ -17,6 +17,8 @@ export class MenuScene extends Phaser.Scene {
 
   create(): void {
     this.bg = new Parallax(this, "day");
+    Audio.setBossMode(false);
+    Audio.setIntensity(0);
     Audio.startMusic();
 
     const user = currentUser();
@@ -56,39 +58,33 @@ export class MenuScene extends Phaser.Scene {
     this.spawnAmbientDucks();
 
     // buttons
-    new PixelButton(this, cx, 236, "JUGAR", {
-      width: 320,
-      height: 54,
+    new PixelButton(this, cx, 234, "JUGAR", {
+      width: 340,
+      height: 56,
       fill: C.rust,
       onClick: () => {
         this.cameras.main.fadeOut(220, 0, 0, 0);
         this.time.delayedCall(240, () => this.scene.start(Scenes.Game));
       },
     });
-    new PixelButton(this, cx, 298, "PUNTAJES", {
-      width: 320,
-      height: 54,
-      fill: C.inkSoft,
-      onClick: () => this.scene.start(Scenes.Scores),
-    });
     const done = unlockedCount();
-    new PixelButton(this, cx, 360, `LOGROS  ${done}/${ACHIEVEMENTS.length}`, {
-      width: 320,
-      height: 54,
-      fontSize: 14,
-      fill: C.inkSoft,
-      onClick: () => this.scene.start(Scenes.Achievements),
+    const grid: Array<[string, () => void]> = [
+      ["PUNTAJES", () => this.scene.start(Scenes.Scores)],
+      [`LOGROS ${done}/${ACHIEVEMENTS.length}`, () => this.scene.start(Scenes.Achievements)],
+      ["AJUSTES", () => this.scene.start(Scenes.Settings)],
+      ["CÓMO JUGAR", () => this.toggleHelp()],
+    ];
+    grid.forEach(([label, fn], i) => {
+      const gx = cx + (i % 2 === 0 ? -90 : 90);
+      const gy = 300 + Math.floor(i / 2) * 62;
+      new PixelButton(this, gx, gy, label, {
+        width: 168,
+        height: 52,
+        fontSize: 11,
+        fill: C.inkSoft,
+        onClick: fn,
+      });
     });
-    new PixelButton(this, cx, 422, "CÓMO JUGAR", {
-      width: 320,
-      height: 54,
-      fill: C.inkSoft,
-      onClick: () => this.toggleHelp(),
-    });
-
-    // audio toggles
-    this.audioToggle(24, GAME_HEIGHT - 58, "MÚSICA", () => Audio.musicOn, (v) => Audio.setMusic(v));
-    this.audioToggle(24, GAME_HEIGHT - 32, "SONIDO", () => !Audio.muted, (v) => Audio.setMuted(!v));
 
     // logout
     const out = this.add
@@ -108,27 +104,6 @@ export class MenuScene extends Phaser.Scene {
     });
 
     this.cameras.main.fadeIn(260, 0, 0, 0);
-  }
-
-  private audioToggle(
-    x: number,
-    y: number,
-    label: string,
-    get: () => boolean,
-    set: (v: boolean) => void,
-  ): void {
-    const t = this.add
-      .text(x, y, "", { fontFamily: FONT_FAMILY, fontSize: "9px", color: css(C.paper) })
-      .setOrigin(0, 0.5)
-      .setInteractive({ useHandCursor: true });
-    const render = () => t.setText(`${label}: ${get() ? "ON" : "OFF"}`);
-    render();
-    t.on("pointerup", () => {
-      Audio.unlock();
-      set(!get());
-      render();
-      Audio.uiMove();
-    });
   }
 
   private spawnAmbientDucks(): void {
@@ -167,7 +142,7 @@ export class MenuScene extends Phaser.Scene {
     }
     const c = this.add.container(0, 0).setDepth(200);
     c.add(this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x0a0e24, 0.72).setOrigin(0));
-    const panel = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 620, 340, C.paper).setStrokeStyle(4, C.ink);
+    const panel = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 640, 400, C.paper).setStrokeStyle(4, C.ink);
     c.add(panel);
     const lines = [
       "CÓMO JUGAR",
@@ -175,9 +150,12 @@ export class MenuScene extends Phaser.Scene {
       "· Apunta con el mouse y haz click para disparar.",
       "· Tienes un cargador por pato: si se te acaba y el",
       "  pato escapa, pierdes una vida.",
-      "· R  = recargar.   P / ESC = pausa.",
+      "· R = recargar.  P / ESC = pausa.",
       "· 1 2 3 = power-ups (se desbloquean por nivel).",
-      "· Aciertos seguidos suben el multiplicador (x4).",
+      "· El combo sube el multiplicador (x4) pero se",
+      "  vacía si dejas de acertar.",
+      "· Entre niveles hay TIENDA: gasta monedas en",
+      "  mejoras y armas. Nivel 5 = jefe final.",
       "",
       "Click para cerrar",
     ];

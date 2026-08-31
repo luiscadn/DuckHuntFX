@@ -1,8 +1,10 @@
-# Duck Hunt — Remake 2.0
+# Duck Hunt — Remake
 
 Reescritura completa del proyecto original de JavaFX como **juego web moderno**.
 Mismo concepto (Duck Hunt con login, niveles y power-ups), pero ahora con game
-loop real, animación de sprites, física de arcade, audio y efectos.
+loop real, animación de sprites, física de arcade, audio y efectos: tipos de pato,
+combo con medidor, logros, clima, dificultad, tienda entre niveles, armas
+desbloqueables, jefe final y tarjeta para compartir.
 
 ## Stack
 
@@ -61,6 +63,32 @@ npm run preview  # sirve el build local para revisarlo
 - **15 logros** (`src/data/achievements.ts`) que se guardan en `localStorage` y se
   ven desde el menú → **LOGROS**. Se notifican con un aviso durante la partida.
 
+### Dificultad, clima y música
+
+- **Dificultad** (Menú → AJUSTES): `Relax` / `Normal` / `Dura` cambia vidas,
+  velocidad de los patos, ritmo de aparición, ventana de combo y puntuación.
+  También se puede apagar la vibración de pantalla y el audio.
+- **Clima** por nivel: viento (arrastra a los patos), lluvia (con relámpagos),
+  niebla. Los niveles nocturnos tienden a tormenta.
+- **Música adaptativa**: la pista de chiptune añade capas según el nivel y el
+  combo, y cambia a un tema más agresivo durante el jefe (`src/audio/AudioBus.ts`).
+
+### Tienda, armas y jefe final
+
+- Al superar un nivel se abre la **TIENDA**: gastas monedas (ganadas mientras
+  puntúas) en vida extra, cargador, recarga rápida, mira ancha o **armas**.
+- **Armas** (`src/data/weapons.ts`): pistola, escopeta (5 perdigones en abanico),
+  rifle (pegada fuerte, atraviesa blindados) y metralleta (cargador 12, muy
+  rápida). Se desbloquean por patos cazados en total, o comprándolas en la tienda.
+- **Nivel 5 = jefe**: "El Rey Pato", con barra de vida, picados y oleadas de
+  minions (`src/objects/BossDuck.ts`). Derrotarlo es la victoria.
+
+### Compartir
+
+En la pantalla de Game Over, **COMPARTIR** genera una tarjeta PNG con tu
+puntuación, nivel, puntería y mejor combo. Usa `navigator.share` en móvil o
+descarga la imagen y copia el texto en escritorio.
+
 ## Cuentas y puntajes
 
 `login` / `registro` y la tabla de puntajes se guardan en `localStorage`
@@ -74,11 +102,13 @@ src/
 ├── main.ts              config de Phaser + lista de escenas
 ├── constants.ts         dimensiones, reglas de juego, claves
 ├── art/                 paleta única + generador de texturas procedurales
-├── audio/AudioBus.ts    sintetizador de SFX y música chiptune
-├── data/                niveles, tipos de pato, cuentas, puntajes y logros
-├── objects/             Duck (IA de vuelo + tipos) y Dog
-├── ui/                  Parallax (fondo por capas), PixelButton, estilos DOM
-└── scenes/              Boot → Auth → Menu → Scores/Achievements → Game (+ Hud) → GameOver
+├── audio/AudioBus.ts    SFX sintetizados + música chiptune adaptativa
+├── data/                niveles, tipos de pato, armas, ajustes, cuentas,
+│                        puntajes y logros
+├── objects/             Duck (IA de vuelo + tipos), BossDuck y Dog
+├── ui/                  Parallax, Weather, PixelButton, estilos DOM
+└── scenes/              Boot → Auth → Menu → Scores/Achievements/Settings
+                         → Game (+ Hud, + Shop) → GameOver
 ```
 
 ## El proyecto JavaFX original

@@ -1,6 +1,6 @@
 {
   "name": "duck-hunt",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Duck Hunt - remake web moderno (TypeScript + Phaser 3)",
   "type": "module",
   "scripts": {

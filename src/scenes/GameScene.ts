@@ -11,14 +11,26 @@ import {
 } from "../constants";
 import { Palette as C, css } from "../art/palette";
 import { Parallax } from "../ui/Parallax";
+import { Weather, pickWeather } from "../ui/Weather";
 import { Audio } from "../audio/AudioBus";
 import { Duck } from "../objects/Duck";
 import { Dog } from "../objects/Dog";
-import { LAST_LEVEL, LEVELS, PowerConfig, levelAt, unlockedPowers } from "../data/levels";
+import { BossDuck } from "../objects/BossDuck";
+import { LAST_LEVEL, PowerConfig, levelAt, unlockedPowers } from "../data/levels";
 import { currentUser, recordResult } from "../data/accounts";
 import { recordRun } from "../data/scores";
 import { DUCK_KINDS, pickDuckKind, type DuckKindId } from "../data/ducks";
-import { RunTracker } from "../data/achievements";
+import { RunTracker, lifetimeDucks } from "../data/achievements";
+import { getSettings, mods, type DifficultyMods } from "../data/settings";
+import {
+  WEAPONS,
+  equipWeapon,
+  equippedWeapon,
+  isWeaponUnlocked,
+  unlockWeapon,
+  type Weapon,
+  type WeaponId,
+} from "../data/weapons";
 
 interface PowerState {
   unlocked: boolean;
@@ -30,6 +42,7 @@ interface PowerState {
 export interface HudSnapshot {
   score: number;
   lives: number;
+  maxLives: number;
   level: number;
   levelName: string;
   target: number;
@@ -39,39 +52,66 @@ export interface HudSnapshot {
   reloading: boolean;
   multiplier: number;
   combo: number;
-  comboTimer: number; // ms left before the combo decays
-  comboWindow: number; // ms the meter takes to empty at the current multiplier
+  comboTimer: number;
+  comboWindow: number;
+  coins: number;
+  weapon: string;
+  boss: { hp: number; maxHp: number } | null;
   powers: Record<PowerId, PowerState & { key: string; label: string; icon: string; durationMs: number; cooldownMs: number }>;
   now: number;
 }
 
+const WEATHER_LABEL: Record<string, string> = { rain: "LLUVIA", fog: "NIEBLA", wind: "VIENTO" };
+
 export class GameScene extends Phaser.Scene {
   private bg!: Parallax;
+  private weather!: Weather;
   private dog!: Dog;
   private crosshair!: Phaser.GameObjects.Image;
   private ducks!: Phaser.GameObjects.Group;
+  private boss?: BossDuck;
+
+  private diff!: DifficultyMods;
+  private weapon!: Weapon;
 
   private score = 0;
-  private lives: number = Rules.startingLives;
+  private lives = 3;
+  private maxLives = 3;
   private levelIndex = 1;
-  private ammo: number = Rules.baseMagazine;
-  private magazine: number = Rules.baseMagazine;
+  private ammo = 3;
+  private magazine = 3;
+  private magBonus = 0;
+  private reloadMul = 1;
+  private aimPad = 0;
   private combo = 0;
   private multiplier = 1;
   private comboTimer = 0;
+
+  private coins = 0;
+  private coinsGranted = 0;
+  private upgradeCounts: Record<string, number> = {};
+
+  private shotsFired = 0;
+  private shotsHit = 0;
+  private runBestCombo = 0;
 
   private reloading = false;
   private clearing = false;
   private paused = false;
   private gameEnded = false;
+  private bossFight = false;
+  private pendingStart: "wave" | "boss" = "wave";
+  private lastShotAt = 0;
 
-  private timeFactor = 1; // movement slow-down for hitstop / golden slow-mo
+  private timeFactor = 1;
   private hitstopUntil = 0;
   private slowmo?: { ms: number; elapsed: number };
 
   private spawnEvent?: Phaser.Time.TimerEvent;
+  private minionEvent?: Phaser.Time.TimerEvent;
   private pauseLayer?: Phaser.GameObjects.Container;
   private tracker!: RunTracker;
+  private shakeOn = true;
 
   private powers!: Record<PowerId, PowerState>;
 
@@ -88,15 +128,17 @@ export class GameScene extends Phaser.Scene {
     const lvl = levelAt(this.levelIndex);
 
     this.bg = new Parallax(this, lvl.timeOfDay);
+    this.weather = new Weather(this, pickWeather(this.levelIndex));
     this.ducks = this.add.group();
     this.dog = new Dog(this);
 
     this.add.image(0, 0, "vignette").setOrigin(0).setDepth(90).setScrollFactor(0);
-
     this.crosshair = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, "crosshair").setDepth(100);
     this.input.setDefaultCursor("none");
 
     this.scene.launch(Scenes.Hud);
+    Audio.setBossMode(false);
+    Audio.setIntensity(0);
 
     this.input.on("pointermove", (p: Phaser.Input.Pointer) => this.crosshair.setPosition(p.x, p.y));
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => this.shoot(p));
@@ -112,7 +154,12 @@ export class GameScene extends Phaser.Scene {
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
 
     this.dog.sniffAcross(-40, GAME_WIDTH * 0.4, 1400);
-    this.time.delayedCall(400, () => this.announce(`NIVEL ${lvl.index}`, lvl.name));
+    this.time.delayedCall(400, () => {
+      this.announce(`NIVEL ${lvl.index}`, lvl.name);
+      if (this.weather.kind !== "clear") {
+        this.time.delayedCall(700, () => this.game.events.emit("dh:banner-mini", WEATHER_LABEL[this.weather.kind]));
+      }
+    });
     this.time.delayedCall(1500, () => this.beginWave());
 
     this.cameras.main.fadeIn(300, 0, 0, 0);
@@ -121,11 +168,20 @@ export class GameScene extends Phaser.Scene {
     if (import.meta.env.DEV) {
       (window as unknown as { __dh: unknown }).__dh = {
         ducks: () => this.aliveDucks().map((d) => ({ x: d.x, y: d.y, kind: d.kind.id })),
-        state: () => ({ score: this.score, lives: this.lives, level: this.levelIndex, combo: this.combo }),
+        state: () => ({
+          score: this.score,
+          lives: this.lives,
+          level: this.levelIndex,
+          combo: this.combo,
+          coins: this.coins,
+          weather: this.weather.kind,
+          boss: this.boss ? this.boss.hp : null,
+        }),
         addScore: (n: number) => {
-          this.score += n;
+          this.addScore(n);
           this.maybeAdvanceLevel();
         },
+        addCoins: (n: number) => (this.coins += n),
         spawn: (id: DuckKindId) => {
           const d = new Duck(this, 120, DUCK_KINDS[id] ?? DUCK_KINDS.normal);
           this.ducks.add(d);
@@ -133,44 +189,65 @@ export class GameScene extends Phaser.Scene {
           d.once("bagged", () => this.onDuckBagged(d));
         },
         bagAll: () => this.aliveDucks().forEach((d) => this.bagDuck(d)),
+        hurtBoss: (n = 5) => this.boss?.hit(n),
         end: (win = false) => this.endGame(win),
       };
     }
   }
 
   private resetState(): void {
+    this.diff = mods();
+    this.shakeOn = getSettings().shake;
+
+    this.weapon = equippedWeapon();
+    if (!isWeaponUnlocked(this.weapon.id, lifetimeDucks())) this.weapon = WEAPONS.pistol;
+
     this.score = 0;
-    this.lives = Rules.startingLives;
+    this.maxLives = Math.max(1, Rules.startingLives + this.diff.livesBonus);
+    this.lives = this.maxLives;
     this.levelIndex = 1;
-    this.magazine = LEVELS[0].magazine;
+    this.magBonus = 0;
+    this.reloadMul = 1;
+    this.aimPad = 0;
+    this.magazine = this.weapon.magazine;
     this.ammo = this.magazine;
     this.combo = 0;
     this.multiplier = 1;
     this.comboTimer = 0;
+    this.coins = 0;
+    this.coinsGranted = 0;
+    this.upgradeCounts = {};
+    this.shotsFired = 0;
+    this.shotsHit = 0;
+    this.runBestCombo = 0;
     this.reloading = false;
     this.clearing = false;
     this.paused = false;
     this.gameEnded = false;
+    this.bossFight = false;
+    this.lastShotAt = 0;
     this.timeFactor = 1;
     this.hitstopUntil = 0;
     this.slowmo = undefined;
+    this.boss = undefined;
     const mk = (): PowerState => ({ unlocked: false, active: false, activeUntil: 0, cooldownUntil: 0 });
-    this.powers = {
-      [Power.Double]: mk(),
-      [Power.Freeze]: mk(),
-      [Power.Clear]: mk(),
-    };
+    this.powers = { [Power.Double]: mk(), [Power.Freeze]: mk(), [Power.Clear]: mk() };
   }
 
-  // ── wave / spawning ──────────────────────────────────────────────
+  private currentMagazine(): number {
+    return this.weapon.magazine + this.magBonus;
+  }
+
+  // ── waves / spawning ─────────────────────────────────────────────
 
   private beginWave(): void {
     if (this.gameEnded) return;
     const lvl = levelAt(this.levelIndex);
     unlockedPowers(this.levelIndex).forEach((p) => (this.powers[p].unlocked = true));
+    Audio.setIntensity(Phaser.Math.Clamp(this.levelIndex - 1, 0, 2));
     this.spawnEvent?.remove();
     this.spawnEvent = this.time.addEvent({
-      delay: lvl.spawnEveryMs,
+      delay: lvl.spawnEveryMs * this.diff.spawnMul,
       loop: true,
       callback: () => this.trySpawn(),
     });
@@ -181,16 +258,14 @@ export class GameScene extends Phaser.Scene {
   private trySpawn(): void {
     if (this.paused || this.clearing || this.gameEnded) return;
     const lvl = levelAt(this.levelIndex);
-    const alive = this.aliveDucks().length;
-    if (alive >= lvl.maxAlive) return;
+    if (this.aliveDucks().length >= lvl.maxAlive + this.diff.maxAliveBonus) return;
+    this.spawnDuck(pickDuckKind(this.levelIndex), Phaser.Math.Between(lvl.speed[0], lvl.speed[1]));
+  }
 
-    const speed = Phaser.Math.Between(lvl.speed[0], lvl.speed[1]);
-    const kind = pickDuckKind(this.levelIndex);
-    const duck = new Duck(this, speed, kind);
+  private spawnDuck(kind = DUCK_KINDS.normal, rawSpeed = 130): Duck {
+    const duck = new Duck(this, rawSpeed * this.diff.speedMul, kind);
     this.ducks.add(duck);
-
     if (this.powers[Power.Freeze].active) duck.setSpeedMul(0.15);
-
     duck.once("escaped", () => this.onDuckEscaped(duck));
     duck.once("bagged", () => this.onDuckBagged(duck));
 
@@ -200,10 +275,9 @@ export class GameScene extends Phaser.Scene {
     } else if (kind.id === "bomb") {
       this.game.events.emit("dh:banner-mini", "¡BOMBA!");
     }
-
-    // spawn puff from the grass
     const puff = this.add.image(duck.x, GROUND_Y + 2, "puff").setDepth(18);
     this.tweens.add({ targets: puff, scale: 1.4, alpha: 0, duration: 260, onComplete: () => puff.destroy() });
+    return duck;
   }
 
   private aliveDucks(): Duck[] {
@@ -215,6 +289,7 @@ export class GameScene extends Phaser.Scene {
   private shoot(p: Phaser.Input.Pointer): void {
     Audio.unlock();
     if (this.paused || this.gameEnded) return;
+    if (this.time.now - this.lastShotAt < this.weapon.fireCooldownMs) return;
 
     this.tweens.add({ targets: this.crosshair, scale: { from: 0.8, to: 1 }, duration: 140, ease: "back.out" });
 
@@ -228,42 +303,122 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    this.lastShotAt = this.time.now;
     this.ammo--;
-    Audio.shoot();
+    this.shotsFired++;
+    this.fireSound();
     this.muzzleFlash(p.x, p.y);
-    this.cameras.main.shake(90, 0.004);
+    this.doShake(90, this.weapon.shake);
 
-    const target = this.aliveDucks()
-      .filter((d) => d.getBounds().contains(p.x, p.y))
-      .sort((a, b) => b.bornAt - a.bornAt)[0];
+    const wob = this.weapon.wobble;
+    const ax = p.x + (wob ? Phaser.Math.Between(-wob, wob) : 0);
+    const ay = p.y + (wob ? Phaser.Math.Between(-wob, wob) : 0);
 
-    if (target) {
-      const killed = target.hit();
-      if (killed) this.bagDuck(target);
-      else this.woundDuck(target);
-    } else {
-      this.onMiss();
-      this.tracker.missedShot();
-    }
+    if (this.weapon.pellets > 1) this.fireSpread(ax, ay);
+    else this.fireSingle(ax, ay);
 
     if (this.ammo === 0) this.tracker.ranDry();
     if (this.ammo <= 0) this.reload();
     this.syncHud();
   }
 
-  private bagDuck(duck: Duck): void {
+  private fireSound(): void {
+    switch (this.weapon.id) {
+      case "shotgun": Audio.shotgunBlast(); break;
+      case "rifle": Audio.rifleShot(); break;
+      case "smg": Audio.smgShot(); break;
+      default: Audio.shoot();
+    }
+  }
+
+  private inflatedBounds(d: Phaser.GameObjects.Sprite): Phaser.Geom.Rectangle {
+    const b = d.getBounds();
+    if (this.aimPad) {
+      b.x -= this.aimPad;
+      b.y -= this.aimPad;
+      b.width += this.aimPad * 2;
+      b.height += this.aimPad * 2;
+    }
+    return b;
+  }
+
+  private fireSingle(x: number, y: number): void {
+    if (this.boss?.alive && this.inflatedBounds(this.boss).contains(x, y)) {
+      this.hitBoss(this.weapon.heavy ? 3 : 1, x, y);
+      return;
+    }
+    const target = this.aliveDucks()
+      .filter((d) => this.inflatedBounds(d).contains(x, y))
+      .sort((a, b) => b.bornAt - a.bornAt)[0];
+
+    if (target) {
+      this.shotsHit++;
+      if (this.weapon.heavy) {
+        target.bag();
+        this.bagDuck(target, true);
+      } else {
+        const killed = target.hit();
+        if (killed) this.bagDuck(target);
+        else this.woundDuck(target);
+      }
+    } else {
+      this.onMiss();
+      this.tracker.missedShot();
+    }
+  }
+
+  private fireSpread(cx: number, cy: number): void {
+    const rings = [0, 26, 52];
+    const points: Array<[number, number]> = [[cx, cy]];
+    for (let i = 1; i < this.weapon.pellets; i++) {
+      const a = (i / (this.weapon.pellets - 1)) * Math.PI * 2;
+      const r = rings[i % rings.length] || 40;
+      points.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+    }
+
+    if (this.boss?.alive && points.some(([x, y]) => this.inflatedBounds(this.boss!).contains(x, y))) {
+      this.hitBoss(2, cx, cy);
+    }
+
+    const hit = new Set<Duck>();
+    for (const [x, y] of points) {
+      for (const d of this.aliveDucks()) {
+        if (!hit.has(d) && this.inflatedBounds(d).contains(x, y)) hit.add(d);
+      }
+    }
+    if (hit.size === 0) {
+      this.onMiss();
+      this.tracker.missedShot();
+      return;
+    }
+    this.shotsHit++;
+    let i = 0;
+    for (const d of hit) {
+      this.time.delayedCall(i++ * 45, () => {
+        if (d.state !== "alive") return;
+        const killed = d.hit();
+        if (killed) this.bagDuck(d);
+        else this.woundDuck(d);
+      });
+    }
+  }
+
+  private bagDuck(duck: Duck, heavy = false): void {
     const kind = duck.kind;
-    duck.bag(); // force the kill (no-op if a shot already downed it)
+    duck.bag();
 
     this.combo++;
+    this.runBestCombo = Math.max(this.runBestCombo, this.combo);
     this.multiplier = Phaser.Math.Clamp(1 + Math.floor((this.combo - 1) / 2), 1, Rules.maxComboMultiplier);
     this.comboTimer = this.comboWindow();
 
     const speedBonus = 1 + Phaser.Math.Clamp((duck.speed - 90) / 260, 0, 1.2);
     const doubleMul = this.powers[Power.Double].active ? 2 : 1;
-    const gained = Math.round(Rules.duckBasePoints * speedBonus * this.multiplier * doubleMul * kind.pointsMul);
-    this.score += gained;
-
+    const heavyMul = heavy ? 1.5 : 1;
+    const gained = Math.round(
+      Rules.duckBasePoints * speedBonus * this.multiplier * doubleMul * kind.pointsMul * heavyMul * this.diff.scoreMul,
+    );
+    this.addScore(gained);
     this.tracker.bag(kind.id, this.combo, this.score);
 
     Audio.hit(this.multiplier);
@@ -274,35 +429,45 @@ export class GameScene extends Phaser.Scene {
     this.scorePopup(duck.x, duck.y, gained, this.multiplier * doubleMul);
 
     if (kind.explodeOnBag) this.bombExplode(duck);
-    if (kind.id === "golden") {
-      this.flash(C.gold, 0.4);
-      this.game.events.emit("dh:combo", this.multiplier * doubleMul);
-    }
-
+    if (kind.id === "golden") this.flash(C.gold, 0.4);
     if (this.multiplier >= 2) this.game.events.emit("dh:combo", this.multiplier * doubleMul);
+
     this.maybeAdvanceLevel();
   }
 
-  /** Armored duck took a hit but is still flying — keep the combo alive, no score. */
   private woundDuck(duck: Duck): void {
     this.comboTimer = Math.max(this.comboTimer, this.comboWindow() * 0.6);
     Audio.clank();
     this.hitstop();
     this.shockwave(duck.x, duck.y);
-    this.cameras.main.shake(60, 0.003);
+    this.doShake(60, 0.003);
+  }
+
+  private hitBoss(dmg: number, x: number, y: number): void {
+    if (!this.boss) return;
+    this.shotsHit++;
+    this.boss.hit(dmg);
+    this.combo++;
+    this.runBestCombo = Math.max(this.runBestCombo, this.combo);
+    this.multiplier = Phaser.Math.Clamp(1 + Math.floor((this.combo - 1) / 2), 1, Rules.maxComboMultiplier);
+    this.comboTimer = this.comboWindow();
+    const gained = Math.round(45 * dmg * this.multiplier * this.diff.scoreMul);
+    this.addScore(gained);
+    Audio.hit(this.multiplier);
+    this.hitstop();
+    this.featherBurst(x, y);
+    this.scorePopup(x, y, gained, this.multiplier);
   }
 
   private bombExplode(bomb: Duck): void {
-    const radius = 155;
     Audio.explode();
     this.flash(C.rust, 0.5);
-    this.cameras.main.shake(300, 0.012);
+    this.doShake(300, 0.012);
     const ring = this.add.image(bomb.x, bomb.y, "ring").setDepth(45).setScale(0.3).setTint(C.rust);
     this.tweens.add({ targets: ring, scale: 5.5, alpha: 0, duration: 420, onComplete: () => ring.destroy() });
-
     this.aliveDucks().forEach((d) => {
       if (d === bomb) return;
-      if (Phaser.Math.Distance.Between(d.x, d.y, bomb.x, bomb.y) <= radius) {
+      if (Phaser.Math.Distance.Between(d.x, d.y, bomb.x, bomb.y) <= 155) {
         this.time.delayedCall(Phaser.Math.Between(20, 130), () => {
           if (d.state === "alive") this.bagDuck(d);
         });
@@ -311,19 +476,26 @@ export class GameScene extends Phaser.Scene {
   }
 
   private comboWindow(): number {
-    return Math.max(Rules.comboWindowMinMs, Rules.comboWindowMs - (this.multiplier - 1) * 400);
+    return Math.max(
+      Rules.comboWindowMinMs,
+      (Rules.comboWindowMs - (this.multiplier - 1) * 400) * this.diff.comboWindowMul,
+    );
+  }
+
+  private addScore(n: number): void {
+    this.score += n;
+    const want = Math.floor(this.score / 120);
+    if (want > this.coinsGranted) {
+      this.coins += want - this.coinsGranted;
+      this.coinsGranted = want;
+    }
   }
 
   private onMiss(): void {
     this.combo = 0;
     this.multiplier = 1;
     this.comboTimer = 0;
-    this.tweens.add({
-      targets: this.crosshair,
-      angle: { from: -12, to: 0 },
-      duration: 180,
-      ease: "quad.out",
-    });
+    this.tweens.add({ targets: this.crosshair, angle: { from: -12, to: 0 }, duration: 180, ease: "quad.out" });
     this.crosshair.setTint(0xff5555);
     this.time.delayedCall(120, () => this.crosshair.clearTint());
   }
@@ -333,7 +505,7 @@ export class GameScene extends Phaser.Scene {
     this.reloading = true;
     Audio.reload();
     this.syncHud();
-    this.time.delayedCall(Rules.reloadMs, () => {
+    this.time.delayedCall(this.weapon.reloadMs * this.reloadMul, () => {
       this.reloading = false;
       this.ammo = this.magazine;
       this.syncHud();
@@ -357,17 +529,18 @@ export class GameScene extends Phaser.Scene {
     this.combo = 0;
     this.multiplier = 1;
     this.comboTimer = 0;
-    this.lives -= kind.escapePenalty;
-    this.tracker.lostLife();
+    const penalty = this.diff.escapeCostsLife ? kind.escapePenalty : 0;
+    this.lives -= penalty;
+    if (penalty > 0) this.tracker.lostLife();
 
-    if (kind.id === "bomb") {
+    if (kind.id === "bomb" && penalty > 0) {
       Audio.explode();
       this.flash(C.rust, 0.55);
-      this.cameras.main.shake(340, 0.015);
+      this.doShake(340, 0.015);
     } else {
       Audio.dogLaugh();
-      this.cameras.main.shake(220, 0.008);
-      this.flash(C.blood, 0.35);
+      this.doShake(220, 0.008);
+      if (penalty > 0) this.flash(C.blood, 0.35);
     }
     this.dog.laugh(Phaser.Math.Between(200, GAME_WIDTH - 200));
     this.refillMagazine();
@@ -378,6 +551,7 @@ export class GameScene extends Phaser.Scene {
 
   private refillMagazine(): void {
     if (this.reloading) return;
+    this.magazine = this.currentMagazine();
     this.ammo = this.magazine;
     this.syncHud();
   }
@@ -385,9 +559,8 @@ export class GameScene extends Phaser.Scene {
   // ── level flow ───────────────────────────────────────────────────
 
   private maybeAdvanceLevel(): void {
-    if (this.clearing || this.gameEnded) return;
-    const lvl = levelAt(this.levelIndex);
-    if (this.score < lvl.targetScore) return;
+    if (this.clearing || this.gameEnded || this.bossFight) return;
+    if (this.score < levelAt(this.levelIndex).targetScore) return;
 
     this.clearing = true;
     this.tracker.levelCleared();
@@ -405,8 +578,8 @@ export class GameScene extends Phaser.Scene {
 
       this.levelIndex++;
       const next = levelAt(this.levelIndex);
-      this.lives = Math.min(Rules.startingLives + 1, this.lives + 1);
-      this.magazine = next.magazine;
+      this.lives = Math.min(this.maxLives, this.lives + 1);
+      this.magazine = this.currentMagazine();
       this.ammo = this.magazine;
       this.combo = 0;
       this.multiplier = 1;
@@ -414,17 +587,73 @@ export class GameScene extends Phaser.Scene {
 
       this.bg.destroy();
       this.bg = new Parallax(this, next.timeOfDay);
+      this.weather.destroy();
+      this.weather = new Weather(this, pickWeather(this.levelIndex));
 
       Audio.levelUp();
       this.announce(`NIVEL ${next.index}`, next.name);
       this.flash(C.gold, 0.4);
-
-      this.time.delayedCall(1200, () => {
-        this.clearing = false;
-        this.beginWave();
-      });
       this.syncHud();
+
+      this.pendingStart = this.levelIndex === LAST_LEVEL ? "boss" : "wave";
+      this.time.delayedCall(1100, () => this.openShop());
     });
+  }
+
+  private openShop(): void {
+    if (this.gameEnded) return;
+    this.scene.pause();
+    this.scene.launch(Scenes.Shop, { game: this });
+  }
+
+  resumeFromShop(): void {
+    this.scene.resume();
+    this.clearing = false;
+    if (this.weather.kind !== "clear") this.game.events.emit("dh:banner-mini", WEATHER_LABEL[this.weather.kind]);
+    if (this.pendingStart === "boss") this.beginBoss();
+    else this.beginWave();
+    this.syncHud();
+  }
+
+  // ── final boss ───────────────────────────────────────────────────
+
+  private beginBoss(): void {
+    if (this.gameEnded) return;
+    this.bossFight = true;
+    unlockedPowers(this.levelIndex).forEach((p) => (this.powers[p].unlocked = true));
+    Audio.setBossMode(true);
+    Audio.setIntensity(3);
+    this.announce("JEFE FINAL", "El Rey Pato");
+    this.flash(C.blood, 0.4);
+
+    const hp = 30 + (this.diff.label === "DURA" ? 14 : this.diff.label === "RELAX" ? -8 : 0);
+    this.boss = new BossDuck(this, hp);
+    this.boss.on("spawnMinions", (n: number) => {
+      for (let i = 0; i < n; i++) {
+        const kind = Math.random() < 0.5 ? DUCK_KINDS.fast : DUCK_KINDS.normal;
+        this.spawnDuck(kind, Phaser.Math.Between(150, 210));
+      }
+    });
+    this.boss.once("defeated", () => this.onBossDefeated());
+
+    this.minionEvent?.remove();
+    this.minionEvent = this.time.addEvent({
+      delay: 3600 * this.diff.spawnMul,
+      loop: true,
+      callback: () => {
+        if (this.aliveDucks().length < 3 && this.boss?.alive) this.spawnDuck(DUCK_KINDS.normal, 170);
+      },
+    });
+    this.syncHud();
+  }
+
+  private onBossDefeated(): void {
+    this.minionEvent?.remove();
+    Audio.setBossMode(false);
+    this.flash(0xffffff, 0.7);
+    this.doShake(600, 0.02);
+    this.aliveDucks().forEach((d) => d.panic());
+    this.time.delayedCall(1600, () => this.endGame(true));
   }
 
   // ── power-ups ────────────────────────────────────────────────────
@@ -444,24 +673,21 @@ export class GameScene extends Phaser.Scene {
 
     if (id === Power.Clear) {
       st.cooldownUntil = this.time.now + cfg.cooldownMs;
-      const targets = this.aliveDucks();
-      this.cameras.main.shake(260, 0.01);
+      this.doShake(260, 0.01);
       this.flash(0xffffff, 0.6);
-      targets.forEach((d, i) => {
+      if (this.boss?.alive) this.boss.hit(4);
+      this.aliveDucks().forEach((d, i) =>
         this.time.delayedCall(i * 70, () => {
           if (d.state === "alive") this.bagDuck(d);
-        });
-      });
+        }),
+      );
       this.syncHud();
       return;
     }
 
     st.active = true;
     st.activeUntil = this.time.now + cfg.durationMs;
-
-    if (id === Power.Freeze) {
-      this.aliveDucks().forEach((d) => d.setSpeedMul(0.15));
-    }
+    if (id === Power.Freeze) this.aliveDucks().forEach((d) => d.setSpeedMul(0.15));
     this.syncHud();
   }
 
@@ -477,10 +703,73 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  // ── shop API (called by ShopScene) ───────────────────────────────
+
+  get coinCount(): number {
+    return this.coins;
+  }
+
+  shopCost(id: string): number | null {
+    const n = this.upgradeCounts[id] ?? 0;
+    switch (id) {
+      case "life":
+        return this.maxLives >= 6 ? null : 4 + n * 3;
+      case "mag":
+        return this.magBonus >= 4 ? null : 3 + n * 2;
+      case "reload":
+        return n >= 2 ? null : 6;
+      case "aim":
+        return n >= 2 ? null : 5;
+      default: {
+        if (id.startsWith("w_")) {
+          const wid = id.slice(2) as WeaponId;
+          if (this.weapon.id === wid) return null;
+          if (isWeaponUnlocked(wid, lifetimeDucks())) return 0;
+          return WEAPONS[wid].shopCost;
+        }
+        return null;
+      }
+    }
+  }
+
+  shopBuy(id: string): boolean {
+    const cost = this.shopCost(id);
+    if (cost === null || this.coins < cost) return false;
+    this.coins -= cost;
+    this.upgradeCounts[id] = (this.upgradeCounts[id] ?? 0) + 1;
+
+    switch (id) {
+      case "life":
+        this.maxLives++;
+        this.lives++;
+        break;
+      case "mag":
+        this.magBonus++;
+        break;
+      case "reload":
+        this.reloadMul *= 0.7;
+        break;
+      case "aim":
+        this.aimPad += 10;
+        break;
+      default:
+        if (id.startsWith("w_")) {
+          const wid = id.slice(2) as WeaponId;
+          unlockWeapon(wid);
+          equipWeapon(wid);
+          this.weapon = WEAPONS[wid];
+          this.magazine = this.currentMagazine();
+          this.ammo = this.magazine;
+        }
+    }
+    this.syncHud();
+    return true;
+  }
+
   // ── pause / end ──────────────────────────────────────────────────
 
   private togglePause(): void {
-    if (this.gameEnded) return;
+    if (this.gameEnded || this.scene.isPaused()) return;
     this.paused = !this.paused;
 
     if (this.paused) {
@@ -489,11 +778,7 @@ export class GameScene extends Phaser.Scene {
       this.anims.pauseAll();
       const c = this.add.container(0, 0).setDepth(300);
       c.add(this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x0a0e24, 0.72).setOrigin(0));
-      c.add(
-        this.add
-          .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 30, "PAUSA", { fontFamily: FONT_FAMILY, fontSize: "40px", color: css(C.gold) })
-          .setOrigin(0.5),
-      );
+      c.add(this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 30, "PAUSA", { fontFamily: FONT_FAMILY, fontSize: "40px", color: css(C.gold) }).setOrigin(0.5));
       c.add(
         this.add
           .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 30, "P / ESC  reanudar\nM  volver al menú", {
@@ -524,8 +809,11 @@ export class GameScene extends Phaser.Scene {
     this.gameEnded = true;
     this.tracker.gameEnded(win, this.levelIndex);
     this.spawnEvent?.remove();
+    this.minionEvent?.remove();
     this.aliveDucks().forEach((d) => d.panic());
     this.input.setDefaultCursor("default");
+    Audio.setBossMode(false);
+    Audio.setIntensity(0);
 
     const user = currentUser();
     if (user) {
@@ -536,6 +824,7 @@ export class GameScene extends Phaser.Scene {
     if (win) Audio.levelUp();
     else Audio.gameOver();
     this.cameras.main.fadeOut(500, 0, 0, 0);
+    const acc = this.shotsFired ? Math.round((this.shotsHit / this.shotsFired) * 100) : 0;
     const newAchievements = this.tracker.earned.map((a) => a.title);
     this.time.delayedCall(560, () => {
       this.scene.stop(Scenes.Hud);
@@ -544,6 +833,8 @@ export class GameScene extends Phaser.Scene {
         level: this.levelIndex,
         win,
         newAchievements,
+        accuracy: acc,
+        bestCombo: this.runBestCombo,
       });
     });
   }
@@ -551,10 +842,18 @@ export class GameScene extends Phaser.Scene {
   private cleanup(): void {
     this.input.setDefaultCursor("default");
     this.spawnEvent?.remove();
+    this.minionEvent?.remove();
+    this.weather?.destroy();
     this.bg?.destroy();
+    Audio.setBossMode(false);
+    Audio.setIntensity(0);
   }
 
   // ── juice helpers ────────────────────────────────────────────────
+
+  private doShake(duration: number, intensity: number): void {
+    if (this.shakeOn) this.cameras.main.shake(duration, intensity);
+  }
 
   private muzzleFlash(x: number, y: number): void {
     const m = this.add.image(x, y, "muzzle").setDepth(99).setScale(0.4).setAngle(Phaser.Math.Between(0, 360));
@@ -608,13 +907,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   private hitstop(): void {
-    if (this.slowmo) return; // don't interrupt a golden slow-mo
+    if (this.slowmo) return;
     this.timeFactor = 0.3;
     this.tweens.timeScale = 0.4;
     this.hitstopUntil = this.time.now + Rules.hitstopMs;
   }
 
-  /** Smooth ramp from slow to normal speed, used when a golden duck is bagged. */
   private startSlowmo(ms: number): void {
     this.slowmo = { ms, elapsed: 0 };
     this.hitstopUntil = 0;
@@ -660,8 +958,9 @@ export class GameScene extends Phaser.Scene {
     const snap: HudSnapshot = {
       score: this.score,
       lives: this.lives,
+      maxLives: this.maxLives,
       level: this.levelIndex,
-      levelName: lvl.name,
+      levelName: this.bossFight ? "JEFE" : lvl.name,
       target: lvl.targetScore,
       prevTarget,
       ammo: this.ammo,
@@ -671,6 +970,9 @@ export class GameScene extends Phaser.Scene {
       combo: this.combo,
       comboTimer: Math.max(0, this.comboTimer),
       comboWindow: this.comboWindow(),
+      coins: this.coins,
+      weapon: this.weapon.label,
+      boss: this.boss ? { hp: this.boss.hp, maxHp: this.boss.maxHp } : null,
       powers,
       now: this.time.now,
     };
@@ -687,6 +989,7 @@ export class GameScene extends Phaser.Scene {
     const scaled = delta * this.timeFactor;
 
     this.bg.update(time, scaled);
+    this.weather.update(scaled);
     this.tickPowers();
 
     (this.ducks.getChildren() as Duck[]).forEach((d) => {
@@ -694,12 +997,20 @@ export class GameScene extends Phaser.Scene {
       d.tick(time, scaled);
     });
 
-    // keep the freeze slow-mo applied to ducks that spawned mid-effect
+    const wind = this.weather.windForce();
+    if (wind) {
+      const dx = (wind * scaled) / 1000;
+      this.aliveDucks().forEach((d) => (d.x = Phaser.Math.Clamp(d.x - dx, 30, GAME_WIDTH - 30)));
+    }
+
+    if (this.boss?.alive) this.boss.tick(scaled, this.crosshair.x);
+
     if (this.powers[Power.Freeze].active) {
       this.aliveDucks().forEach((d) => d.setSpeedMul(0.15));
     }
 
-    // combo meter drains when you stop bagging ducks
+    Audio.setIntensity(this.bossFight ? 3 : Phaser.Math.Clamp(this.levelIndex - 1 + (this.multiplier >= 3 ? 1 : 0), 0, 3));
+
     if (this.combo > 0) {
       this.comboTimer -= delta;
       if (this.comboTimer <= 0) {

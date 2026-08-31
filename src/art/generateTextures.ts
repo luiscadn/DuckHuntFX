@@ -213,6 +213,19 @@ function buildFx(tm: TM): void {
     line(s.ctx, 2, 6, 8, 3, C.duckBodyShade, 1);
     register(tm, "feather", s);
   }
+  // raindrop / gust streaks for weather
+  {
+    const s = surface(3, 16);
+    s.ctx.fillStyle = "rgba(200,224,244,0.85)";
+    s.ctx.fillRect(0, 0, 3, 16);
+    register(tm, "raindrop", s);
+  }
+  {
+    const s = surface(28, 3);
+    s.ctx.fillStyle = "rgba(255,255,255,0.5)";
+    s.ctx.fillRect(0, 0, 28, 3);
+    register(tm, "gust", s);
+  }
   // puff
   {
     const s = surface(22, 22);
@@ -444,9 +457,51 @@ function buildBadges(tm: TM): void {
   }
 }
 
+function buildBoss(tm: TM): void {
+  const W = 150;
+  const H = 110;
+  const paint = (ctx: CanvasRenderingContext2D, wingUp: boolean): void => {
+    // tail
+    fillPoly(ctx, [[34, 52], [6, 40], [36, 70]], 0xf2f0e4);
+    fillPoly(ctx, [[6, 40], [22, 46], [12, 56]], C.duckWing);
+    // body
+    ellipse(ctx, 74, 62, 40, 27, 0xf2f0e4);
+    ellipse(ctx, 70, 74, 32, 15, C.duckBodyShade);
+    ctx.globalAlpha = 0.22;
+    ellipse(ctx, 66, 48, 26, 10, 0xffffff);
+    ctx.globalAlpha = 1;
+    // neck + head (royal green)
+    fillPoly(ctx, [[86, 50], [104, 22], [118, 40], [100, 66]], C.duckHead);
+    ellipse(ctx, 116, 34, 21, 19, C.duckHead);
+    ellipse(ctx, 116, 42, 18, 10, C.duckHeadShade);
+    // white collar
+    line(ctx, 98, 50, 112, 58, 0xf2f0e4, 7);
+    // eye
+    circle(ctx, 124, 30, 3.4, C.duckEye);
+    circle(ctx, 125.5, 28.5, 1.4, C.paper);
+    // beak
+    fillPoly(ctx, [[132, 30], [150, 32], [150, 44], [132, 46]], C.duckBeak);
+    fillPoly(ctx, [[132, 42], [150, 44], [150, 47], [132, 46]], C.duckBeakShade);
+    // crown
+    fillPoly(ctx, [[104, 16], [110, 2], [116, 12], [122, 0], [128, 12], [134, 3], [138, 16]], C.gold);
+    rect(ctx, 104, 15, 34, 5, C.goldDeep);
+    circle(ctx, 121, 4, 2, C.blood);
+    // wing
+    if (wingUp) {
+      fillPoly(ctx, [[70, 44], [52, 6], [96, 12], [98, 46]], C.duckWing);
+      fillPoly(ctx, [[52, 6], [70, 14], [64, 26]], C.duckBodyShade);
+    } else {
+      fillPoly(ctx, [[70, 74], [58, 108], [100, 100], [100, 72]], C.duckWing);
+      fillPoly(ctx, [[58, 108], [74, 100], [68, 88]], C.duckBodyShade);
+    }
+  };
+  registerSheet(tm, "boss", W, H, 2, (ctx, i) => paint(ctx, i === 0));
+}
+
 /** Entry point — call once from BootScene. */
 export function generateAllTextures(tm: TM): void {
   buildDuck(tm);
+  buildBoss(tm);
   buildDog(tm);
   buildFx(tm);
   buildScenery(tm);

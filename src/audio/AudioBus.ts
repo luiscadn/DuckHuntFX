@@ -13,6 +13,9 @@ class AudioBus {
   private sfxGain!: GainNode;
   private _muted = false;
   private _musicOn = true;
+  private _sfxOn = true;
+  private _intensity = 0;
+  private _boss = false;
   private musicTimer: number | null = null;
   private step = 0;
   private nextNoteTime = 0;
@@ -54,6 +57,28 @@ class AudioBus {
     this._musicOn = on;
     if (on) this.startMusic();
     else this.stopMusic();
+  }
+
+  get sfxOn(): boolean {
+    return this._sfxOn;
+  }
+  setSfx(on: boolean): void {
+    this._sfxOn = on;
+    if (this.sfxGain) this.sfxGain.gain.value = on ? 1 : 0;
+  }
+
+  /** Sync audio toggles from the persisted settings. */
+  applySettings(s: { music: boolean; sfx: boolean }): void {
+    this.setSfx(s.sfx);
+    this.setMusic(s.music);
+  }
+
+  /** 0..3 — how many layers of the loop are playing. Set from the game scene. */
+  setIntensity(n: number): void {
+    this._intensity = Math.max(0, Math.min(3, Math.round(n)));
+  }
+  setBossMode(on: boolean): void {
+    this._boss = on;
   }
 
   // ── low-level voices ─────────────────────────────────────────────
@@ -157,6 +182,10 @@ class AudioBus {
     this.tone({ freq: 120, to: 40, dur: 0.4, type: "sawtooth", vol: 0.3 });
     this.tone({ freq: 60, to: 30, dur: 0.5, type: "square", vol: 0.22, delay: 0.04 });
   }
+  thunder(): void {
+    this.noise({ dur: 1.1, vol: 0.4, type: "lowpass", freq: 400, to: 40 });
+    this.tone({ freq: 70, to: 32, dur: 0.9, type: "sawtooth", vol: 0.2, delay: 0.05 });
+  }
   golden(): void {
     for (let i = 0; i < 5; i++) {
       this.tone({ freq: 1046 * Math.pow(1.18, i), dur: 0.12, type: "triangle", vol: 0.14, delay: i * 0.05 });
@@ -201,11 +230,31 @@ class AudioBus {
     this.tone({ freq: 440, to: 300, dur: 0.09, type: "square", vol: 0.16 });
   }
 
-  // ── chiptune loop ────────────────────────────────────────────────
+  // ── weapon reports ───────────────────────────────────────────────
 
-  private readonly bass = [55, 55, 82.4, 55, 73.4, 73.4, 98, 82.4];
-  private readonly lead = [
+  shotgunBlast(): void {
+    this.noise({ dur: 0.24, vol: 0.6, type: "lowpass", freq: 2600, to: 180 });
+    this.tone({ freq: 150, to: 45, dur: 0.2, type: "square", vol: 0.3 });
+  }
+  rifleShot(): void {
+    this.noise({ dur: 0.1, vol: 0.55, type: "highpass", freq: 1400 });
+    this.tone({ freq: 260, to: 70, dur: 0.16, type: "sawtooth", vol: 0.3 });
+    this.tone({ freq: 90, dur: 0.12, type: "square", vol: 0.2, delay: 0.02 });
+  }
+  smgShot(): void {
+    this.noise({ dur: 0.05, vol: 0.32, type: "lowpass", freq: 2600, to: 600 });
+    this.tone({ freq: 220, to: 120, dur: 0.05, type: "square", vol: 0.14 });
+  }
+
+  // ── adaptive chiptune loop ───────────────────────────────────────
+
+  private readonly baseBass = [55, 55, 82.4, 55, 73.4, 73.4, 98, 82.4];
+  private readonly baseLead = [
     440, 0, 523, 587, 659, 0, 587, 523, 494, 0, 587, 494, 440, 0, 392, 440,
+  ];
+  private readonly bossBass = [49, 49, 49, 58.3, 55, 55, 43.7, 49];
+  private readonly bossLead = [
+    587, 0, 698, 0, 622, 0, 587, 523, 466, 0, 523, 0, 587, 622, 698, 740,
   ];
 
   startMusic(): void {
@@ -222,32 +271,30 @@ class AudioBus {
   }
   private scheduler(): void {
     if (!this.ctx) return;
-    const spb = 60 / 112 / 2; // eighth notes
+    const bass = this._boss ? this.bossBass : this.baseBass;
+    const lead = this._boss ? this.bossLead : this.baseLead;
+    const bpm = this._boss ? 150 : 112;
+    const spb = 60 / bpm / 2; // eighth notes
+
     while (this.nextNoteTime < this.ctx.currentTime + 0.15) {
       const s = this.step;
       const delay = this.nextNoteTime - this.ctx.currentTime;
-      this.tone({
-        freq: this.bass[s % this.bass.length],
-        dur: spb * 0.9,
-        type: "triangle",
-        vol: 0.28,
-        delay,
-        dest: this.musicGain,
-      });
-      const lead = this.lead[s % this.lead.length];
-      if (lead > 0) {
-        this.tone({
-          freq: lead,
-          dur: spb * 0.8,
-          type: "square",
-          vol: 0.12,
-          delay,
-          dest: this.musicGain,
-        });
+      const i = this._intensity;
+
+      this.tone({ freq: bass[s % bass.length], dur: spb * 0.9, type: "triangle", vol: 0.28, delay, dest: this.musicGain });
+      if (this._boss || i >= 1) this.tone({ freq: bass[s % bass.length] / 2, dur: spb * 0.95, type: "square", vol: 0.16, delay, dest: this.musicGain });
+
+      const note = lead[s % lead.length];
+      if ((this._boss || i >= 1) && note > 0) {
+        this.tone({ freq: note, dur: spb * 0.8, type: "square", vol: 0.12, delay, dest: this.musicGain });
+        if (i >= 3) this.tone({ freq: note * 2, dur: spb * 0.5, type: "square", vol: 0.06, delay, dest: this.musicGain });
       }
-      if (s % 2 === 0) {
-        this.noise({ dur: 0.03, vol: 0.06, freq: 8000, delay });
+      if (i >= 2 && s % 2 === 1) {
+        this.tone({ freq: note > 0 ? note * 1.5 : 660, dur: spb * 0.4, type: "triangle", vol: 0.07, delay, dest: this.musicGain });
       }
+      if ((i >= 2 || this._boss) && s % 2 === 0) this.noise({ dur: 0.03, vol: 0.06, freq: 9000, delay });
+      if ((i >= 3 || this._boss) && s % 4 === 2) this.noise({ dur: 0.09, vol: 0.14, type: "bandpass", freq: 1800, delay });
+
       this.nextNoteTime += spb;
       this.step = (this.step + 1) % 16;
     }

@@ -8,6 +8,7 @@ const POWER_ORDER: PowerId[] = [Power.Double, Power.Freeze, Power.Clear];
 
 export class HudScene extends Phaser.Scene {
   private hearts: Phaser.GameObjects.Image[] = [];
+  private heartMax = 0;
   private bullets: Phaser.GameObjects.Image[] = [];
   private bulletMag = 0;
 
@@ -15,9 +16,14 @@ export class HudScene extends Phaser.Scene {
   private levelText!: Phaser.GameObjects.Text;
   private reloadText!: Phaser.GameObjects.Text;
   private multText!: Phaser.GameObjects.Text;
+  private coinText!: Phaser.GameObjects.Text;
+  private weaponText!: Phaser.GameObjects.Text;
   private barFill!: Phaser.GameObjects.Rectangle;
   private comboBar!: Phaser.GameObjects.Rectangle;
   private comboBarBg!: Phaser.GameObjects.Rectangle;
+  private bossBarBg!: Phaser.GameObjects.Rectangle;
+  private bossBarFill!: Phaser.GameObjects.Rectangle;
+  private bossLabel!: Phaser.GameObjects.Text;
   private banner!: Phaser.GameObjects.Container;
   private bannerBig!: Phaser.GameObjects.Text;
   private bannerSmall!: Phaser.GameObjects.Text;
@@ -40,16 +46,27 @@ export class HudScene extends Phaser.Scene {
   create(): void {
     // this scene is launched fresh on every run — clear anything from a prior life
     this.hearts = [];
+    this.heartMax = 0;
     this.bullets = [];
     this.bulletMag = 0;
     this.powerSlots = [];
     this.toastQueue = [];
     this.toastBusy = false;
 
-    // hearts
-    for (let i = 0; i < 4; i++) {
-      this.hearts.push(this.add.image(28 + i * 30, 30, "heart").setScale(1.4).setScrollFactor(0));
-    }
+    this.coinText = this.add
+      .text(20, this.scale.height - 22, "", { fontFamily: FONT_FAMILY, fontSize: "10px", color: css(C.gold) })
+      .setOrigin(0, 0.5);
+    this.weaponText = this.add
+      .text(GAME_WIDTH - 24, 74, "", { fontFamily: FONT_FAMILY, fontSize: "8px", color: css(C.paperShade) })
+      .setOrigin(1, 0.5);
+
+    // boss health bar (hidden unless a boss is present)
+    this.bossBarBg = this.add.rectangle(GAME_WIDTH / 2, 118, 440, 16, C.ink, 0.75).setStrokeStyle(2, C.blood).setVisible(false);
+    this.bossBarFill = this.add.rectangle(GAME_WIDTH / 2 - 216, 118, 432, 10, C.blood).setOrigin(0, 0.5).setVisible(false);
+    this.bossLabel = this.add
+      .text(GAME_WIDTH / 2, 102, "EL REY PATO", { fontFamily: FONT_FAMILY, fontSize: "9px", color: css(C.gold) })
+      .setOrigin(0.5)
+      .setVisible(false);
 
     // score + progress bar
     this.scoreText = this.add
@@ -209,10 +226,31 @@ export class HudScene extends Phaser.Scene {
     const s = this.registry.get("dh:hud") as HudSnapshot | undefined;
     if (!s) return;
 
-    for (let i = 0; i < this.hearts.length; i++) this.hearts[i].setVisible(i < s.lives);
+    // hearts (rebuilt when the max changes, e.g. after a shop purchase)
+    if (this.heartMax !== s.maxLives) {
+      this.hearts.forEach((h) => h.destroy());
+      this.hearts = [];
+      const n = Math.min(s.maxLives, 8);
+      for (let i = 0; i < n; i++) {
+        this.hearts.push(this.add.image(28 + i * 28, 30, "heart").setScale(1.3).setScrollFactor(0));
+      }
+      this.heartMax = s.maxLives;
+    }
+    for (let i = 0; i < this.hearts.length; i++) {
+      this.hearts[i].setVisible(true).setAlpha(i < s.lives ? 1 : 0.18);
+    }
 
     this.scoreText.setText(s.score.toLocaleString("es"));
     this.levelText.setText(`NIVEL ${s.level} · ${s.levelName}`);
+    this.coinText.setText(`MONEDAS ${s.coins}`);
+    this.weaponText.setText(s.weapon.toUpperCase());
+
+    // boss bar
+    const boss = s.boss;
+    this.bossBarBg.setVisible(!!boss);
+    this.bossBarFill.setVisible(!!boss);
+    this.bossLabel.setVisible(!!boss);
+    if (boss) this.bossBarFill.width = 432 * Phaser.Math.Clamp(boss.hp / boss.maxHp, 0, 1);
 
     const span = Math.max(1, s.target - s.prevTarget);
     const prog = Phaser.Math.Clamp((s.score - s.prevTarget) / span, 0, 1);

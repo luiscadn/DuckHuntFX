@@ -19,6 +19,8 @@ export const Scenes = {
   Menu: "Menu",
   Scores: "Scores",
   Achievements: "Achievements",
+  Settings: "Settings",
+  Shop: "Shop",
   Game: "Game",
   Hud: "Hud",
   GameOver: "GameOver",
@@ -32,6 +34,7 @@ export const StoreKeys = {
   settings: "dh:settings",
   achievements: "dh:achievements",
   stats: "dh:stats",
+  weapons: "dh:weapons",
 } as const;
 
 /** Core gameplay rules (Duck-Hunt-flavoured, tuned for feel). */

@@ -7,12 +7,19 @@ import { AuthScene } from "./scenes/AuthScene";
 import { MenuScene } from "./scenes/MenuScene";
 import { ScoresScene } from "./scenes/ScoresScene";
 import { AchievementsScene } from "./scenes/AchievementsScene";
+import { SettingsScene } from "./scenes/SettingsScene";
+import { ShopScene } from "./scenes/ShopScene";
 import { GameScene } from "./scenes/GameScene";
 import { HudScene } from "./scenes/HudScene";
 import { GameOverScene } from "./scenes/GameOverScene";
+import { getSettings } from "./data/settings";
 
-// Resume / create the audio context on the first real user gesture.
-const unlock = () => Audio.unlock();
+// Resume / create the audio context on the first real user gesture, then apply saved audio prefs.
+const unlock = () => {
+  Audio.unlock();
+  const s = getSettings();
+  Audio.applySettings({ music: s.music, sfx: s.sfx });
+};
 window.addEventListener("pointerdown", unlock, { once: true });
 window.addEventListener("keydown", unlock, { once: true });
 
@@ -36,8 +43,10 @@ new Phaser.Game({
     MenuScene,
     ScoresScene,
     AchievementsScene,
+    SettingsScene,
     GameScene,
     HudScene,
+    ShopScene, // overlay — must sit above Game + Hud in the render order
     GameOverScene,
   ],
 });
