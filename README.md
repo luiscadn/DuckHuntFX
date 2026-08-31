@@ -1,131 +1,118 @@
-# Salpicón
+# Salpicón — Web Arcade Game
 
-Juego web de **tiro en la marisma**: apuntas con el ratón, cazas patos y un
-cocodrilo los recoge del agua. Reescritura completa del proyecto original de
-JavaFX (ejercicio universitario inspirado en los clásicos de galería de tiro),
-ahora con game loop real, animación de sprites, física de arcade, audio y
-efectos: tipos de pato, combo con medidor, logros, clima, dificultad, tienda
-entre niveles, armas desbloqueables, jefe final y tarjeta para compartir.
+Videojuego web de tiro en la marisma desarrollado en 2D con estética pixel art. El proyecto implementa una arquitectura orientada a objetos basada en escenas, generación procedural de gráficos mediante código HTML5 Canvas, síntesis de audio en tiempo real con Web Audio API y físicas de precisión arcade.
 
-## Stack
+---
 
-| Pieza | Qué es |
-|---|---|
-| **[Phaser 3](https://phaser.io)** | Motor de juego 2D: escenas, sprites, animación, input, cámara, tweens. |
-| **TypeScript** | Todo el código tipado. |
-| **Vite** | Dev server con hot-reload y build de producción. |
+## Capturas de Pantalla
 
-**Sin archivos de assets.** Todo el arte (pato, cocodrilo, mira, escenario, HUD,
-iconos) se dibuja por código a baja resolución y se registra como textura pixel-art
-en el arranque (`src/art/`). Todo el audio se sintetiza con la Web Audio API
-(`src/audio/AudioBus.ts`). Esto mantiene el estilo 100% cohesivo y el repo liviano.
+<p align="center">
+  <img src="docs/assets/Menu-preview.png" alt="Menú Principal" width="31%" />
+  <img src="docs/assets/big-duck-preview.png" alt="Batalla contra el Jefe Final" width="31%" />
+  <img src="docs/assets/victory-preview.png" alt="Pantalla de Victoria" width="31%" />
+</p>
 
-## Cómo correrlo
+---
 
-```bash
-npm install
-npm run dev      # http://localhost:5173
-```
+## Arquitectura y Stack Tecnológico
 
-Build de producción (carpeta `dist/`, lista para GitHub Pages, itch.io o Vercel):
+El proyecto está diseñado bajo una arquitectura limpia y desacoplada sin dependencia de assets externos alojados en disco. Todo el apartado visual y auditivo se genera en tiempo de ejecución.
 
-```bash
-npm run build
-npm run preview  # sirve el build local para revisarlo
-```
+| Componente | Tecnología | Responsabilidad Técnica |
+|---|---|---|
+| **Motor de Juego** | Phaser 3 | Manejo del game loop, máquina de estados de escenas, renderizador 2D, física de proyectiles, colisiones y cámara. |
+| **Lenguaje** | TypeScript | Tipado estático riguroso, interfaces para la capa de datos, herencia de clases de entidades y detección de errores en compilación. |
+| **Empaquetador** | Vite | Servidor de desarrollo con HMR y empaquetado optimizado con tree-shaking para producción. |
+| **Generación de Arte** | HTML5 Canvas API | Dibujo procedural de sprites pixel-art, paleta de colores indexada y registro de texturas en el gestor de Phaser durante el arranque. |
+| **Sistema de Audio** | Web Audio API | Sintetizador de efectos de sonido FX y composición musical adaptativa por capas en código puro. |
 
-## Cómo se juega
+---
 
-- **Mouse** para apuntar, **click** para disparar.
-- Tienes un **cargador por pato**: si se te acaba y el pato escapa, pierdes una vida.
-- **R** recarga · **P / ESC** pausa · **M** (en pausa) vuelve al menú.
-- **1 / 2 / 3** activan power-ups, que se desbloquean por nivel:
-  - Nivel 2 → **Doble** (puntos x2 unos segundos)
-  - Nivel 3 → **Freeze** (los patos casi se detienen)
-  - Nivel 4 → **Bomba** (embolsa todos los patos en pantalla)
-- 5 niveles (amanecer → mediodía → atardecer → ocaso → noche). Al superarlos todos: victoria.
+## Características de la Arquitectura
 
-### Tipos de pato
+### 1. Generación Procedural de Assets (Zero-Asset Architecture)
+Tanto las texturas visuales como los efectos de sonido se generan de manera dinámica al iniciar la aplicación:
+- **Texturas**: Las rutinas ubicadas en la capa de arte procesan matrices numéricas para pintar frames de animación directamente en lienzos Canvas en memoria.
+- **Audio**: Un bus centralizado sintetiza frecuencias, ondas cuadradas y ruido blanco para simular disparos, cuac de aves, explosiones y música adaptativa según la intensidad del juego.
 
-| Tipo | Rasgos |
-|---|---|
-| Normal | El pato base. |
-| Rápido (azul) | Pequeño y errático, más puntos. |
-| Blindado (gris) | Aguanta 2 disparos. |
-| Dorado | Raro. Vale x10 y activa cámara lenta al cazarlo. |
-| Bomba (rojo) | Al dispararle revienta a los patos cercanos; si escapa, quita 2 vidas. |
+### 2. Máquina de Estados y Flujo de Escenas
+El juego administra el ciclo de vida de la interfaz mediante escenas independientes:
+- `BootScene`: Carga inicial e inicialización procedural de texturas y sonidos.
+- `AuthScene`: Gestión de credenciales locales y perfil de jugador.
+- `MenuScene`: Navegación principal, configuración de parámetros y consulta de puntuaciones.
+- `GameScene`: Ciclo principal de juego con gestión de oleadas, clima y patrones de movimiento.
+- `HudScene`: Capa superpuesta en tiempo real para barras de estado, munición, combo y notificaciones.
+- `GameOverScene`: Resumen de métricas, evaluación de rendimiento y exportación gráfica de resultados.
 
-### Combo y logros
+### 3. Sistema de Entidades y Patrones de Movimiento
+- **Entidad Pato**: Implementación de inteligencia de vuelo errático con variaciones de velocidad, resistencia a disparos, temporizadores de escape y eventos al ser neutralizado.
+- **Entidad Cocodrilo**: Agente dinámico encargado de la recolección en agua según el resultado del disparo.
+- **Jefe Final**: Entidad compleja con barra de salud integrada, cambio de fase de ataque y spawn de unidades secundarias.
 
-- Aciertos seguidos suben el **multiplicador** hasta x4. El **medidor de combo se
-  vacía con el tiempo**: hay que seguir cazando para no perderlo (y la ventana se
-  acorta a multiplicadores altos).
-- **15 logros** (`src/data/achievements.ts`) que se guardan en `localStorage` y se
-  ven desde el menú → **LOGROS**. Se notifican con un aviso durante la partida.
+### 4. Eventos Climáticos y Física de Entorno
+Cálculo de vectores de fuerza que afectan las trayectorias según las condiciones atmosféricas del nivel:
+- **Viento**: Desplazamiento lateral progresivo de los proyectiles y entidades.
+- **Lluvia y Niebla**: Renderizado de partículas y capas de oclusión visual.
 
-### Dificultad, clima y música
+---
 
-- **Dificultad** (Menú → AJUSTES): `Relax` / `Normal` / `Dura` cambia vidas,
-  velocidad de los patos, ritmo de aparición, ventana de combo y puntuación.
-  También se puede apagar la vibración de pantalla y el audio.
-- **Clima** por nivel: viento (arrastra a los patos), lluvia (con relámpagos),
-  niebla. Los niveles nocturnos tienden a tormenta.
-- **Música adaptativa**: la pista de chiptune añade capas según el nivel y el
-  combo, y cambia a un tema más agresivo durante el jefe (`src/audio/AudioBus.ts`).
+## Controles del Juego
 
-### Tienda, armas y jefe final
+- **Mouse / Touch**: Control de retícula y disparo.
+- **Tecla R**: Recarga manual del cargador.
+- **Teclas P / ESC**: Pausa del sistema.
+- **Tecla M**: Retorno al menú principal en estado de pausa.
+- **Teclas 1, 2, 3**: Activación de habilidades de apoyo (Multiplicador, Congelación, Bomba de área).
 
-- Al superar un nivel se abre la **TIENDA**: gastas monedas (ganadas mientras
-  puntúas) en vida extra, cargador, recarga rápida, mira ancha o **armas**.
-- **Armas** (`src/data/weapons.ts`): pistola, escopeta (5 perdigones en abanico),
-  rifle (pegada fuerte, atraviesa blindados) y metralleta (cargador 12, muy
-  rápida). Se desbloquean por patos cazados en total, o comprándolas en la tienda.
-- **Nivel 5 = jefe**: "El Rey Pato", con barra de vida, picados y oleadas de
-  minions (`src/objects/BossDuck.ts`). Derrotarlo es la victoria.
+---
 
-### Compartir
+## Estructura del Código Fuente
 
-En la pantalla de Game Over, **COMPARTIR** genera una tarjeta PNG con tu
-puntuación, nivel, puntería y mejor combo. Usa `navigator.share` en móvil o
-descarga la imagen y copia el texto en escritorio.
-
-## Cuentas y puntajes
-
-`login` / `registro` y la tabla de puntajes se guardan en `localStorage`
-(`src/data/`). Las contraseñas se guardan con hash + salt — suficiente para un
-juego local, **no** es seguridad real. Hay opción de "entrar como invitado".
-
-## Estructura
-
-```
+```text
 src/
-├── main.ts              config de Phaser + lista de escenas
-├── constants.ts         dimensiones, reglas de juego, claves
-├── art/                 paleta única + generador de texturas procedurales
-├── audio/AudioBus.ts    SFX sintetizados + música chiptune adaptativa
-├── data/                niveles, tipos de pato, armas, ajustes, cuentas,
-│                        puntajes y logros
-├── objects/             Duck (IA de vuelo + tipos), BossDuck y Croc
-├── ui/                  Parallax, Weather, PixelButton, estilos DOM
-└── scenes/              Boot → Auth → Menu → Scores/Achievements/Settings
-                         → Game (+ Hud, + Shop) → GameOver
+├── main.ts              Punto de entrada e inicialización de la configuración de Phaser
+├── constants.ts         Definición de constantes globales, dimensiones y claves de eventos
+├── art/                 Algoritmos de generación gráfica y definición de paleta de color
+├── audio/               Controlador sintetizado de sonido y música adaptativa
+├── data/                Estructura de datos para niveles, armas, logros y almacenamiento
+├── objects/             Clases de entidades: Pato, Jefe Final y Cocodrilo
+├── ui/                  Componentes de interfaz, fondos parallax y efectos de clima
+└── scenes/              Conjunto de escenas que controlan el flujo de la aplicación
 ```
 
-## Publicar (Play Store, itch, web)
+---
 
-El juego es original — mecánica de galería de tiro (no registrable), arte y audio
-generados por código, ambientado en una marisma con un cocodrilo. No usa el
-nombre ni el perro de *Duck Hunt* (marca de Nintendo). Antes de publicar en una
-tienda conviene:
+## Instalación y Despliegue
 
-- **Empaquetar la fuente** *Press Start 2P* localmente (hoy carga desde Google
-  Fonts) e incluir su licencia **SIL OFL**.
-- Añadir una pantalla de **licencias de código abierto** (Phaser → MIT).
-- Redactar una **política de privacidad** corta: el juego solo guarda nombre y
-  puntajes en el `localStorage` del dispositivo, nada sale del equipo.
-- Para Android: envolver la web con TWA (Bubblewrap) o Capacitor.
+### Requisitos Previos
+- Node.js versión 18.0 o superior
+- Gestor de paquetes npm
 
-## El proyecto JavaFX original
+### Pasos de Instalación
 
-La versión anterior en JavaFX vive en el historial de git (antes del commit del
-remake). Para verla: `git log --oneline` y `git checkout <commit-anterior>`.
+1. Clonar el repositorio:
+   ```bash
+   git clone https://github.com/luiscadn/DuckHuntFX.git
+   cd DuckHuntFX
+   ```
+
+2. Instalar las dependencias del proyecto:
+   ```bash
+   npm install
+   ```
+
+3. Ejecutar en entorno de desarrollo local:
+   ```bash
+   npm run dev
+   ```
+
+4. Compilar para producción:
+   ```bash
+   npm run build
+   ```
+
+---
+
+## Licencia
+
+Este proyecto está bajo la Licencia MIT. Consulta el archivo [LICENSE](LICENSE) para más detalles.
