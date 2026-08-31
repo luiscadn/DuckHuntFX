@@ -26,10 +26,10 @@ export class MenuScene extends Phaser.Scene {
 
     // title
     this.add
-      .text(cx + 5, 82, "DUCK  HUNT", { fontFamily: FONT_FAMILY, fontSize: "50px", color: css(C.rust) })
+      .text(cx + 5, 82, "SALPICON", { fontFamily: FONT_FAMILY, fontSize: "50px", color: css(C.rust) })
       .setOrigin(0.5);
     const title = this.add
-      .text(cx, 76, "DUCK  HUNT", { fontFamily: FONT_FAMILY, fontSize: "50px", color: css(C.gold) })
+      .text(cx, 76, "SALPICON", { fontFamily: FONT_FAMILY, fontSize: "50px", color: css(C.gold) })
       .setOrigin(0.5);
     this.tweens.add({ targets: title, angle: { from: -1.5, to: 1.5 }, duration: 2200, yoyo: true, repeat: -1, ease: "sine.inOut" });
 

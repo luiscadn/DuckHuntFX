@@ -134,7 +134,7 @@ export class GameOverScene extends Phaser.Scene {
     });
 
     if (win) this.celebrate();
-    else this.sadDog();
+    else this.sadCroc();
 
     this.cameras.main.fadeIn(400, 0, 0, 0);
   }
@@ -191,7 +191,7 @@ export class GameOverScene extends Phaser.Scene {
     ctx.textAlign = "center";
     ctx.fillStyle = css(C.gold);
     ctx.font = font(30);
-    ctx.fillText("DUCK HUNT", w / 2, 62);
+    ctx.fillText("SALPICON", w / 2, 62);
     ctx.fillStyle = css(C.paper);
     ctx.font = font(13);
     ctx.fillText(`${name}${win ? "  ·  ¡VICTORIA!" : ""}`, w / 2, 100);
@@ -219,14 +219,14 @@ export class GameOverScene extends Phaser.Scene {
       /* duck art optional */
     }
 
-    const text = `Hice ${score.toLocaleString("es")} puntos en Duck Hunt (nivel ${level}, ${acc}% de puntería). ¿Puedes superarlo?`;
+    const text = `Hice ${score.toLocaleString("es")} puntos en Salpicón (nivel ${level}, ${acc}% de puntería). ¿Puedes superarlo?`;
     cv.toBlob(async (blob) => {
       if (!blob) return;
-      const file = new File([blob], "duck-hunt.png", { type: "image/png" });
+      const file = new File([blob], "salpicon.png", { type: "image/png" });
       const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
       if (nav.canShare?.({ files: [file] })) {
         try {
-          await nav.share({ files: [file], text, title: "Duck Hunt" });
+          await nav.share({ files: [file], text, title: "Salpicón" });
           return;
         } catch {
           /* user cancelled — fall through to download */
@@ -235,7 +235,7 @@ export class GameOverScene extends Phaser.Scene {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "duck-hunt.png";
+      a.download = "salpicon.png";
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -263,10 +263,9 @@ export class GameOverScene extends Phaser.Scene {
     this.tweens.add({ targets: t, alpha: 0, delay: 1800, duration: 500, onComplete: () => t.destroy() });
   }
 
-  private sadDog(): void {
-    const dog = this.add.sprite(GAME_WIDTH - 120, GROUND_Y + 30, "dog", 2).setOrigin(0.5, 1).setDepth(5);
-    dog.setFlipX(true);
-    this.tweens.add({ targets: dog, y: GROUND_Y + 24, yoyo: true, repeat: -1, duration: 700 });
+  private sadCroc(): void {
+    const croc = this.add.sprite(GAME_WIDTH - 120, GROUND_Y + 44, "croc", 2).setOrigin(0.5, 1).setDepth(5);
+    this.tweens.add({ targets: croc, y: GROUND_Y + 38, yoyo: true, repeat: -1, duration: 900 });
   }
 
   update(time: number, delta: number): void {

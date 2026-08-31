@@ -49,13 +49,13 @@ export const Palette = {
   duckBeakShade: 0xc47c0c,
   duckDead: 0xe4b9b0,
   duckEye: 0x161327,
-  // ── dog ──────────────────────────────────────────────────────────
-  dogBody: 0xc98a3c,
-  dogBodyShade: 0x9c6828,
-  dogWhite: 0xf3e6c8,
-  dogEar: 0x5a3a1c,
-  dogNose: 0x161327,
-  dogTongue: 0xd9525b,
+  // ── crocodile (the marsh retriever) ──────────────────────────────
+  crocBody: 0x4f7d3f,
+  crocShade: 0x365a2b,
+  crocBelly: 0xd7cfa2,
+  crocTeeth: 0xf6f2df,
+  crocMouth: 0x8a3b46,
+  crocEye: 0xf2c94c,
   // ── fx ───────────────────────────────────────────────────────────
   muzzle: 0xfff2b0,
   muzzleCore: 0xffffff,

@@ -14,7 +14,7 @@ import { Parallax } from "../ui/Parallax";
 import { Weather, pickWeather } from "../ui/Weather";
 import { Audio } from "../audio/AudioBus";
 import { Duck } from "../objects/Duck";
-import { Dog } from "../objects/Dog";
+import { Croc } from "../objects/Croc";
 import { BossDuck } from "../objects/BossDuck";
 import { LAST_LEVEL, PowerConfig, levelAt, unlockedPowers } from "../data/levels";
 import { currentUser, recordResult } from "../data/accounts";
@@ -66,7 +66,7 @@ const WEATHER_LABEL: Record<string, string> = { rain: "LLUVIA", fog: "NIEBLA", w
 export class GameScene extends Phaser.Scene {
   private bg!: Parallax;
   private weather!: Weather;
-  private dog!: Dog;
+  private croc!: Croc;
   private crosshair!: Phaser.GameObjects.Image;
   private ducks!: Phaser.GameObjects.Group;
   private boss?: BossDuck;
@@ -130,7 +130,7 @@ export class GameScene extends Phaser.Scene {
     this.bg = new Parallax(this, lvl.timeOfDay);
     this.weather = new Weather(this, pickWeather(this.levelIndex));
     this.ducks = this.add.group();
-    this.dog = new Dog(this);
+    this.croc = new Croc(this);
 
     this.add.image(0, 0, "vignette").setOrigin(0).setDepth(90).setScrollFactor(0);
     this.crosshair = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, "crosshair").setDepth(100);
@@ -153,7 +153,7 @@ export class GameScene extends Phaser.Scene {
 
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
 
-    this.dog.sniffAcross(-40, GAME_WIDTH * 0.4, 1400);
+    this.croc.sniffAcross(-40, GAME_WIDTH * 0.4, 1400);
     this.time.delayedCall(400, () => {
       this.announce(`NIVEL ${lvl.index}`, lvl.name);
       if (this.weather.kind !== "clear") {
@@ -190,6 +190,7 @@ export class GameScene extends Phaser.Scene {
         },
         bagAll: () => this.aliveDucks().forEach((d) => this.bagDuck(d)),
         hurtBoss: (n = 5) => this.boss?.hit(n),
+        croc: (grin = false) => (grin ? this.croc.laugh(480) : this.croc.retrieve(480)),
         end: (win = false) => this.endGame(win),
       };
     }
@@ -516,7 +517,7 @@ export class GameScene extends Phaser.Scene {
 
   private onDuckBagged(duck: Duck): void {
     Audio.coin();
-    this.dog.retrieve(duck.x);
+    this.croc.retrieve(duck.x, () => Audio.chomp());
     this.time.delayedCall(60, () => duck.destroy());
     this.refillMagazine();
   }
@@ -538,11 +539,11 @@ export class GameScene extends Phaser.Scene {
       this.flash(C.rust, 0.55);
       this.doShake(340, 0.015);
     } else {
-      Audio.dogLaugh();
+      Audio.taunt();
       this.doShake(220, 0.008);
       if (penalty > 0) this.flash(C.blood, 0.35);
     }
-    this.dog.laugh(Phaser.Math.Between(200, GAME_WIDTH - 200));
+    this.croc.laugh(Phaser.Math.Between(200, GAME_WIDTH - 200));
     this.refillMagazine();
     this.syncHud();
 

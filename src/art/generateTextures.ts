@@ -4,7 +4,7 @@
  * Naming:
  *   duck        4-frame flap sheet (up, mid, down, mid), faces right
  *   duck-hit    single tumbling / shot frame
- *   dog         3-frame sheet (sniff, jump, laugh)
+ *   croc        3-frame sheet (lurk, snap, grin)
  *   crosshair, muzzle, feather, puff, star, ring
  *   cloud0/1, bush, tree, reed, grass, sun, moon
  *   heart, bullet, bullet-empty
@@ -88,82 +88,96 @@ function buildDuck(tm: TM): void {
   register(tm, "duck-hit", s);
 }
 
-// ── DOG ────────────────────────────────────────────────────────────
+// ── CROCODILE (marsh retriever) ────────────────────────────────────
 
-const DOG_W = 76;
-const DOG_H = 58;
+const CROC_W = 100;
+const CROC_H = 64;
 
-function buildDog(tm: TM): void {
-  registerSheet(tm, "dog", DOG_W, DOG_H, 3, (ctx, i) => {
-    if (i === 0) drawDogSniff(ctx);
-    else if (i === 1) drawDogJump(ctx);
-    else drawDogLaugh(ctx);
+function buildCroc(tm: TM): void {
+  registerSheet(tm, "croc", CROC_W, CROC_H, 3, (ctx, i) => {
+    if (i === 0) drawCrocLurk(ctx);
+    else if (i === 1) drawCrocSnap(ctx);
+    else drawCrocGrin(ctx);
   });
 }
 
-function drawDogSniff(ctx: CanvasRenderingContext2D): void {
-  // tail
-  fillPoly(ctx, [[12, 30], [4, 16], [18, 26]], C.dogBody);
-  // legs
-  rect(ctx, 20, 42, 5, 12, C.dogBodyShade);
-  rect(ctx, 40, 42, 5, 12, C.dogBodyShade);
-  // body
-  ellipse(ctx, 34, 34, 21, 12, C.dogBody);
-  ellipse(ctx, 34, 40, 17, 7, C.dogWhite);
-  // head down-forward
-  ellipse(ctx, 54, 36, 12, 10, C.dogBody);
-  fillPoly(ctx, [[60, 33], [72, 36], [72, 44], [58, 43]], C.dogBody);
-  ellipse(ctx, 66, 41, 6, 3, C.dogWhite);
-  circle(ctx, 71, 39, 2.4, C.dogNose);
-  // ear
-  fillPoly(ctx, [[47, 26], [43, 44], [54, 34]], C.dogEar);
-  // eye
-  circle(ctx, 55, 32, 1.6, C.dogNose);
+/** teeth: little triangles along a segment, pointing `dir` (1 down, -1 up) */
+function teeth(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, dir: number, n: number): void {
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1);
+    const x = x1 + (x2 - x1) * t;
+    const y = y1 + (y2 - y1) * t;
+    fillPoly(ctx, [[x - 2, y], [x + 2, y], [x, y + dir * 5]], C.crocTeeth);
+  }
 }
 
-function drawDogJump(ctx: CanvasRenderingContext2D): void {
-  ctx.save();
-  ctx.translate(38, 30);
-  ctx.rotate(-0.18);
-  ctx.translate(-38, -30);
-  // back legs tucked
-  rect(ctx, 22, 40, 5, 10, C.dogBodyShade);
-  // body more upright
-  ellipse(ctx, 36, 32, 18, 13, C.dogBody);
-  ellipse(ctx, 36, 38, 14, 7, C.dogWhite);
-  // front paws reaching up
-  fillPoly(ctx, [[48, 20], [56, 8], [60, 12], [54, 26]], C.dogBody);
-  fillPoly(ctx, [[44, 22], [50, 10], [54, 14], [50, 28]], C.dogBodyShade);
-  // head up, mouth open
-  ellipse(ctx, 52, 20, 11, 10, C.dogBody);
-  fillPoly(ctx, [[58, 16], [70, 12], [70, 20], [58, 22]], C.dogBody);
-  fillPoly(ctx, [[58, 20], [70, 22], [70, 27], [57, 25]], C.dogBodyShade);
-  ellipse(ctx, 62, 21, 3, 2, C.dogTongue);
-  circle(ctx, 69, 14, 2.2, C.dogNose);
-  fillPoly(ctx, [[45, 10], [41, 24], [51, 16]], C.dogEar);
-  circle(ctx, 53, 17, 1.6, C.dogNose);
-  ctx.restore();
+function backRidge(ctx: CanvasRenderingContext2D, x: number, y: number, n: number, step: number): void {
+  for (let i = 0; i < n; i++) fillPoly(ctx, [[x + i * step, y], [x + i * step + 5, y], [x + i * step + 2, y - 6]], C.crocShade);
 }
 
-function drawDogLaugh(ctx: CanvasRenderingContext2D): void {
-  // arms resting on belly
-  rect(ctx, 18, 40, 6, 12, C.dogBodyShade);
-  rect(ctx, 44, 40, 6, 12, C.dogBodyShade);
-  ellipse(ctx, 34, 36, 20, 13, C.dogBody);
-  ellipse(ctx, 34, 42, 16, 7, C.dogWhite);
-  // paws clutching belly
-  ellipse(ctx, 24, 34, 5, 4, C.dogBodyShade);
-  ellipse(ctx, 44, 34, 5, 4, C.dogBodyShade);
-  // head tipped back, wide open laughing mouth
-  ellipse(ctx, 40, 20, 13, 11, C.dogBody);
-  fillPoly(ctx, [[30, 10], [24, 24], [36, 16]], C.dogEar);
-  fillPoly(ctx, [[50, 10], [56, 24], [44, 16]], C.dogEar);
-  ellipse(ctx, 43, 24, 6, 5, C.dogNose);
-  ellipse(ctx, 43, 26, 4, 3, C.dogTongue);
-  circle(ctx, 40, 9, 2.4, C.dogNose);
-  // squeezed-shut happy eyes
-  line(ctx, 33, 17, 39, 19, C.dogNose, 1.6);
-  line(ctx, 47, 19, 53, 17, C.dogNose, 1.6);
+function drawCrocLurk(ctx: CanvasRenderingContext2D): void {
+  // low snout ridge just breaking the surface
+  ellipse(ctx, 50, 50, 40, 10, C.crocBody);
+  rect(ctx, 12, 46, 78, 12, C.crocBody);
+  ctx.globalAlpha = 0.4;
+  rect(ctx, 12, 46, 78, 3, C.crocBelly);
+  ctx.globalAlpha = 1;
+  // eye humps
+  ellipse(ctx, 34, 40, 8, 8, C.crocBody);
+  ellipse(ctx, 52, 40, 8, 8, C.crocBody);
+  circle(ctx, 34, 39, 3, C.crocEye);
+  circle(ctx, 52, 39, 3, C.crocEye);
+  circle(ctx, 34, 39, 1.4, C.crocMouth);
+  circle(ctx, 52, 39, 1.4, C.crocMouth);
+  // nostrils at the snout tip
+  circle(ctx, 82, 48, 1.6, C.crocShade);
+  circle(ctx, 88, 50, 1.6, C.crocShade);
+}
+
+function drawCrocSnap(ctx: CanvasRenderingContext2D): void {
+  // body rising out of the water
+  ellipse(ctx, 40, 50, 30, 18, C.crocBody);
+  ellipse(ctx, 40, 58, 24, 9, C.crocBelly);
+  backRidge(ctx, 16, 40, 5, 9);
+  // head
+  ellipse(ctx, 58, 34, 18, 14, C.crocBody);
+  // mouth cavity
+  fillPoly(ctx, [[50, 34], [96, 16], [98, 26], [54, 40]], C.crocMouth);
+  // lower jaw (forward)
+  fillPoly(ctx, [[50, 36], [96, 24], [98, 34], [54, 44]], C.crocBody);
+  teeth(ctx, 56, 36, 94, 26, -1, 6);
+  // upper jaw (hinged up-back)
+  fillPoly(ctx, [[48, 30], [90, 2], [96, 12], [54, 34]], C.crocBody);
+  teeth(ctx, 56, 30, 88, 12, 1, 6);
+  // eye on top of the head
+  ellipse(ctx, 54, 20, 7, 7, C.crocBody);
+  circle(ctx, 54, 19, 3.2, C.crocEye);
+  circle(ctx, 54, 19, 1.4, C.crocMouth);
+  circle(ctx, 92, 8, 1.6, C.crocShade);
+}
+
+function drawCrocGrin(ctx: CanvasRenderingContext2D): void {
+  ellipse(ctx, 40, 50, 30, 18, C.crocBody);
+  ellipse(ctx, 40, 58, 24, 9, C.crocBelly);
+  backRidge(ctx, 16, 40, 5, 9);
+  // long head, closed smug grin
+  ellipse(ctx, 58, 34, 22, 15, C.crocBody);
+  fillPoly(ctx, [[36, 36], [92, 28], [92, 33], [36, 41]], C.crocShade);
+  // zig-zag teeth along the seam
+  for (let i = 0; i < 9; i++) {
+    const x = 40 + i * 6;
+    const y = 37 - i * 0.9;
+    fillPoly(ctx, [[x - 2, y], [x + 2, y], [x, y + (i % 2 ? 4 : -4)]], C.crocTeeth);
+  }
+  // eyes: one open, one half-closed (smug)
+  ellipse(ctx, 46, 22, 7, 7, C.crocBody);
+  circle(ctx, 46, 21, 3.2, C.crocEye);
+  circle(ctx, 46, 21, 1.4, C.crocMouth);
+  line(ctx, 60, 22, 70, 21, C.crocShade, 2.4);
+  // a stray feather poking from the mouth corner
+  fillPoly(ctx, [[88, 30], [96, 24], [99, 28], [92, 34]], C.duckBody);
+  line(ctx, 89, 31, 97, 26, C.duckWing, 1);
+  circle(ctx, 90, 44, 1.6, C.crocShade);
 }
 
 // ── FX + PROPS ─────────────────────────────────────────────────────
@@ -502,7 +516,7 @@ function buildBoss(tm: TM): void {
 export function generateAllTextures(tm: TM): void {
   buildDuck(tm);
   buildBoss(tm);
-  buildDog(tm);
+  buildCroc(tm);
   buildFx(tm);
   buildScenery(tm);
   buildHudIcons(tm);
@@ -511,4 +525,4 @@ export function generateAllTextures(tm: TM): void {
 }
 
 export const DuckFrame = { W: DUCK_W, H: DUCK_H };
-export const DogFrame = { W: DOG_W, H: DOG_H };
+export const CrocFrame = { W: CROC_W, H: CROC_H };

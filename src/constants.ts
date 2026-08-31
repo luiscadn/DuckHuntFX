@@ -37,7 +37,7 @@ export const StoreKeys = {
   weapons: "dh:weapons",
 } as const;
 
-/** Core gameplay rules (Duck-Hunt-flavoured, tuned for feel). */
+/** Core gameplay rules (arcade light-gun shooter, tuned for feel). */
 export const Rules = {
   startingLives: 3,
   baseMagazine: 3, // bullets per duck before it can escape

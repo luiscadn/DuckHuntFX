@@ -199,17 +199,15 @@ class AudioBus {
     notes.forEach((f, i) => this.tone({ freq: f, dur: 0.13, type: "square", vol: 0.2, delay: i * 0.09 }));
     this.tone({ freq: 1319, dur: 0.3, type: "triangle", vol: 0.14, delay: 0.36 });
   }
-  dogLaugh(): void {
-    for (let i = 0; i < 4; i++) {
-      this.tone({
-        freq: 300 - i * 10,
-        to: 200,
-        dur: 0.1,
-        type: "sawtooth",
-        vol: 0.22,
-        delay: i * 0.13,
-      });
-    }
+  /** Croc surfacing with a smug grin: a low hiss + a tail slap on the water. */
+  taunt(): void {
+    this.noise({ dur: 0.32, vol: 0.28, type: "highpass", freq: 3200, to: 1400 });
+    this.tone({ freq: 90, to: 55, dur: 0.16, type: "sawtooth", vol: 0.2, delay: 0.18 });
+    this.noise({ dur: 0.14, vol: 0.3, type: "lowpass", freq: 900, to: 120, delay: 0.18 });
+  }
+  chomp(): void {
+    this.tone({ freq: 220, to: 60, dur: 0.07, type: "square", vol: 0.24 });
+    this.noise({ dur: 0.06, vol: 0.26, type: "lowpass", freq: 1600, to: 200 });
   }
   levelUp(): void {
     const notes = [523, 659, 784, 1047];
