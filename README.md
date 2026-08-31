@@ -1,129 +1,70 @@
-# Duck Hunt FX
+# Duck Hunt — Remake 2.0
 
-[![Java](https://img.shields.io/badge/Java-21-orange.svg?style=flat&logo=openjdk)](https://openjdk.org/)
-[![JavaFX](https://img.shields.io/badge/JavaFX-21-blue.svg?style=flat)](https://openjfx.io/)
-[![Build Tool](https://img.shields.io/badge/Maven-3.9-C71A36.svg?style=flat&logo=apachemaven)](https://maven.apache.org/)
-[![Tests](https://img.shields.io/badge/JUnit-5.10-25A162.svg?style=flat&logo=junit5)](https://junit.org/junit5/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+Reescritura completa del proyecto original de JavaFX como **juego web moderno**.
+Mismo concepto (Duck Hunt con login, niveles y power-ups), pero ahora con game
+loop real, animación de sprites, física de arcade, audio y efectos.
 
-> A modern desktop remake of the classic retro NES arcade game **Duck Hunt**, built with **Java 21** and **JavaFX 21**. Features custom crosshair mechanics, animated sprite physics, special tactical power-ups, multi-level difficulty progression, and player authentication.
+## Stack
 
-<p align="center">
-  <img src="pre-view.png" alt="Duck Hunt FX Gameplay Preview" width="700"/>
-</p>
+| Pieza | Qué es |
+|---|---|
+| **[Phaser 3](https://phaser.io)** | Motor de juego 2D: escenas, sprites, animación, input, cámara, tweens. |
+| **TypeScript** | Todo el código tipado. |
+| **Vite** | Dev server con hot-reload y build de producción. |
 
----
+**Sin archivos de assets.** Todo el arte (pato, perro, mira, escenario, HUD,
+iconos) se dibuja por código a baja resolución y se registra como textura pixel-art
+en el arranque (`src/art/`). Todo el audio se sintetiza con la Web Audio API
+(`src/audio/AudioBus.ts`). Esto mantiene el estilo 100% cohesivo y el repo liviano.
 
-## Gameplay & Key Features
-
-- **Retro Arcade Mechanics:** Faithful recreation of sprite animations (flying ducks, falling animation, custom shotgun crosshair).
-- **Tactical Special Abilities:**
-  - **Freeze Time:** Pauses all flying ducks for 10 seconds to line up easy shots.
-  - **Double Shot:** Multiplies points earned per hit for a limited duration.
-  - **Clear Ducks:** Tactical nuke clearing all active targets on screen simultaneously.
-- **Dynamic Difficulty:** Flying speed and ducks per wave scale dynamically with each level.
-- **Classic Nostalgia:** Includes the infamous hunting dog laughing at missed shots.
-- **User Authentication:** Player profile registration and login system with domain validation.
-- **Automated Testing:** Unit test suite with JUnit 5 covering model and service layers.
-
----
-
-## Tech Stack & Architecture
-
-- **Language:** Java 21 LTS
-- **UI Framework:** JavaFX 21 ~ Modular FXML + Programmatic Views
-- **Build System:** Apache Maven with included cross-platform wrapper `./mvnw`
-- **Testing:** JUnit 5 Jupiter
-- **CI/CD:** GitHub Actions Continuous Integration
-
-### Architecture Overview
-
-```
-com.luiscadn.duckhunt/
-├── DuckHuntApp.java       # Application entry point and stage lifecycle manager
-├── controller/            # MVC Controllers
-│   ├── GameController.java       # Game loop, sprite updates, abilities & collision
-│   ├── MenuController.java       # Main menu and navigation
-│   ├── LoginController.java      # Authentication logic
-│   └── RegisterController.java   # Player registration
-├── model/                 # Domain Entities & Business Services
-│   ├── User.java                 # Player domain model
-│   └── UserService.java          # Authentication & player registry service
-└── view/                  # Presentation Layer
-    ├── LoginView.java            # Login UI
-    └── RegisterView.java         # Registration UI
-```
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- **JDK 21 or later** installed.
-  - On macOS (via Homebrew):
-    ```bash
-    brew install openjdk@21
-    ```
-  - On Linux (Ubuntu/Debian):
-    ```bash
-    sudo apt install openjdk-21-jdk
-    ```
-  - On Windows: Download from [Adoptium Temurin](https://adoptium.net/).
-
-### Building from Source
-
-Clone the repository and build using the included Maven Wrapper:
+## Cómo correrlo
 
 ```bash
-git clone https://github.com/luiscadn/DuckHuntFX.git
-cd DuckHuntFX
-
-# Ensure the Maven wrapper is executable (Linux/macOS)
-chmod +x mvnw
-
-# Run automated tests and package
-./mvnw clean package
+cd duck-hunt
+npm install
+npm run dev      # http://localhost:5173
 ```
 
-### Running the Game
-
-**Option 1: Using the JavaFX Maven plugin**
-```bash
-./mvnw javafx:run
-```
-
-**Option 2: Running the packaged JAR directly**
-```bash
-java -jar target/duckhunt-fx-1.0.0.jar
-```
-
----
-
-## Controls
-
-| Action | Control |
-| :--- | :--- |
-| **Aim** | Move Mouse (Custom Crosshair) |
-| **Shoot** | Left Mouse Click |
-| **Freeze Time** | Ability Button (Level 3+) |
-| **Double Shot** | Ability Button (Level 2+) |
-| **Clear Ducks** | Ability Button (Level 4+) |
-
----
-
-## Testing
-
-Run the automated JUnit 5 test suite:
+Build de producción (carpeta `dist/`, lista para GitHub Pages, itch.io o Vercel):
 
 ```bash
-./mvnw test
+npm run build
+npm run preview  # sirve el build local para revisarlo
 ```
 
-Test reports are generated automatically under `target/surefire-reports/`.
+## Cómo se juega
 
----
+- **Mouse** para apuntar, **click** para disparar.
+- Tienes un **cargador por pato**: si se te acaba y el pato escapa, pierdes una vida.
+- **R** recarga · **P / ESC** pausa · **M** (en pausa) vuelve al menú.
+- **1 / 2 / 3** activan power-ups, que se desbloquean por nivel:
+  - Nivel 2 → **Doble** (puntos x2 unos segundos)
+  - Nivel 3 → **Freeze** (los patos casi se detienen)
+  - Nivel 4 → **Bomba** (embolsa todos los patos en pantalla)
+- Aciertos seguidos suben el **multiplicador de combo** hasta x4. Fallar lo reinicia.
+- 5 niveles (amanecer → mediodía → atardecer → ocaso → noche). Al superarlos todos: victoria.
 
-## License
+## Cuentas y puntajes
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+`login` / `registro` y la tabla de puntajes se guardan en `localStorage`
+(`src/data/`). Las contraseñas se guardan con hash + salt — suficiente para un
+juego local, **no** es seguridad real. Hay opción de "entrar como invitado".
+
+## Estructura
+
+```
+src/
+├── main.ts              config de Phaser + lista de escenas
+├── constants.ts         dimensiones, reglas de juego, claves
+├── art/                 paleta única + generador de texturas procedurales
+├── audio/AudioBus.ts    sintetizador de SFX y música chiptune
+├── data/                niveles, cuentas y puntajes (localStorage)
+├── objects/             Duck (IA de vuelo) y Dog
+├── ui/                  Parallax (fondo por capas), PixelButton, estilos DOM
+└── scenes/              Boot → Auth → Menu → Scores → Game (+ Hud) → GameOver
+```
+
+## El proyecto JavaFX original
+
+La versión anterior en JavaFX vive en el historial de git (antes de este commit).
+Para verla: `git log --oneline` y `git checkout <commit-anterior>`.
