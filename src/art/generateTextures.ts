@@ -410,6 +410,40 @@ function buildPowerIcons(tm: TM): void {
   });
 }
 
+function buildBadges(tm: TM): void {
+  // achievement medal
+  {
+    const s = surface(34, 42);
+    const ctx = s.ctx;
+    // ribbon
+    fillPoly(ctx, [[12, 20], [22, 20], [18, 40], [17, 40]], C.blood);
+    fillPoly(ctx, [[13, 20], [21, 20], [17, 34], [16, 34]], C.rust);
+    // disc
+    circle(ctx, 17, 16, 14, C.goldDeep);
+    circle(ctx, 17, 16, 11, C.gold);
+    // star
+    fillPoly(
+      ctx,
+      [
+        [17, 6], [19.5, 13], [27, 13], [21, 17.5],
+        [23.5, 25], [17, 20.5], [10.5, 25], [13, 17.5],
+        [7, 13], [14.5, 13],
+      ],
+      C.ink,
+    );
+    register(tm, "medal", s);
+  }
+  // locked medal (grey, question mark drawn by scene as text)
+  {
+    const s = surface(34, 42);
+    const ctx = s.ctx;
+    fillPoly(ctx, [[12, 20], [22, 20], [18, 40], [17, 40]], C.inkSoft);
+    circle(ctx, 17, 16, 14, 0x3a3850);
+    circle(ctx, 17, 16, 11, C.inkSoft);
+    register(tm, "medal-locked", s);
+  }
+}
+
 /** Entry point — call once from BootScene. */
 export function generateAllTextures(tm: TM): void {
   buildDuck(tm);
@@ -418,6 +452,7 @@ export function generateAllTextures(tm: TM): void {
   buildScenery(tm);
   buildHudIcons(tm);
   buildPowerIcons(tm);
+  buildBadges(tm);
 }
 
 export const DuckFrame = { W: DUCK_W, H: DUCK_H };

@@ -147,6 +147,29 @@ class AudioBus {
       this.tone({ freq: 440 * Math.pow(1.26, i), dur: 0.09, type: "square", vol: 0.2, delay: i * 0.06 });
     }
   }
+  clank(): void {
+    this.tone({ freq: 1400, to: 600, dur: 0.06, type: "square", vol: 0.22 });
+    this.noise({ dur: 0.08, vol: 0.22, type: "bandpass", freq: 2600, to: 900 });
+    this.tone({ freq: 320, dur: 0.05, type: "triangle", vol: 0.14, delay: 0.02 });
+  }
+  explode(): void {
+    this.noise({ dur: 0.5, vol: 0.55, type: "lowpass", freq: 1400, to: 60 });
+    this.tone({ freq: 120, to: 40, dur: 0.4, type: "sawtooth", vol: 0.3 });
+    this.tone({ freq: 60, to: 30, dur: 0.5, type: "square", vol: 0.22, delay: 0.04 });
+  }
+  golden(): void {
+    for (let i = 0; i < 5; i++) {
+      this.tone({ freq: 1046 * Math.pow(1.18, i), dur: 0.12, type: "triangle", vol: 0.14, delay: i * 0.05 });
+    }
+  }
+  comboLost(): void {
+    this.tone({ freq: 520, to: 180, dur: 0.22, type: "sawtooth", vol: 0.18 });
+  }
+  achievement(): void {
+    const notes = [659, 784, 988, 1319];
+    notes.forEach((f, i) => this.tone({ freq: f, dur: 0.13, type: "square", vol: 0.2, delay: i * 0.09 }));
+    this.tone({ freq: 1319, dur: 0.3, type: "triangle", vol: 0.14, delay: 0.36 });
+  }
   dogLaugh(): void {
     for (let i = 0; i < 4; i++) {
       this.tone({

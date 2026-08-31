@@ -5,6 +5,7 @@ import { Parallax } from "../ui/Parallax";
 import { PixelButton } from "../ui/Button";
 import { Audio } from "../audio/AudioBus";
 import { currentUser, logout } from "../data/accounts";
+import { ACHIEVEMENTS, unlockedCount } from "../data/achievements";
 
 export class MenuScene extends Phaser.Scene {
   private bg!: Parallax;
@@ -55,21 +56,32 @@ export class MenuScene extends Phaser.Scene {
     this.spawnAmbientDucks();
 
     // buttons
-    new PixelButton(this, cx, 250, "JUGAR", {
+    new PixelButton(this, cx, 236, "JUGAR", {
       width: 320,
+      height: 54,
       fill: C.rust,
       onClick: () => {
         this.cameras.main.fadeOut(220, 0, 0, 0);
         this.time.delayedCall(240, () => this.scene.start(Scenes.Game));
       },
     });
-    new PixelButton(this, cx, 318, "PUNTAJES", {
+    new PixelButton(this, cx, 298, "PUNTAJES", {
       width: 320,
+      height: 54,
       fill: C.inkSoft,
       onClick: () => this.scene.start(Scenes.Scores),
     });
-    new PixelButton(this, cx, 386, "CÓMO JUGAR", {
+    const done = unlockedCount();
+    new PixelButton(this, cx, 360, `LOGROS  ${done}/${ACHIEVEMENTS.length}`, {
       width: 320,
+      height: 54,
+      fontSize: 14,
+      fill: C.inkSoft,
+      onClick: () => this.scene.start(Scenes.Achievements),
+    });
+    new PixelButton(this, cx, 422, "CÓMO JUGAR", {
+      width: 320,
+      height: 54,
       fill: C.inkSoft,
       onClick: () => this.toggleHelp(),
     });

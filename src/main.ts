@@ -6,6 +6,7 @@ import { BootScene } from "./scenes/BootScene";
 import { AuthScene } from "./scenes/AuthScene";
 import { MenuScene } from "./scenes/MenuScene";
 import { ScoresScene } from "./scenes/ScoresScene";
+import { AchievementsScene } from "./scenes/AchievementsScene";
 import { GameScene } from "./scenes/GameScene";
 import { HudScene } from "./scenes/HudScene";
 import { GameOverScene } from "./scenes/GameOverScene";
@@ -29,5 +30,14 @@ new Phaser.Game({
   },
   dom: { createContainer: true },
   render: { antialias: false },
-  scene: [BootScene, AuthScene, MenuScene, ScoresScene, GameScene, HudScene, GameOverScene],
+  scene: [
+    BootScene,
+    AuthScene,
+    MenuScene,
+    ScoresScene,
+    AchievementsScene,
+    GameScene,
+    HudScene,
+    GameOverScene,
+  ],
 });

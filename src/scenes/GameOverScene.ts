@@ -10,6 +10,7 @@ interface OverData {
   score: number;
   level: number;
   win: boolean;
+  newAchievements?: string[];
 }
 
 export class GameOverScene extends Phaser.Scene {
@@ -81,6 +82,27 @@ export class GameOverScene extends Phaser.Scene {
           color: css(C.paperShade),
         })
         .setOrigin(0.5);
+    }
+
+    const gained = this.params.newAchievements ?? [];
+    if (gained.length) {
+      this.add.image(cx - 148, 314, "medal").setScale(0.85);
+      this.add
+        .text(cx - 128, 306, `${gained.length} LOGRO${gained.length > 1 ? "S" : ""} NUEVO${gained.length > 1 ? "S" : ""}`, {
+          fontFamily: FONT_FAMILY,
+          fontSize: "9px",
+          color: css(C.gold),
+        })
+        .setOrigin(0, 0.5);
+      this.add
+        .text(cx - 128, 322, gained.slice(0, 3).join("  ·  ") + (gained.length > 3 ? " …" : ""), {
+          fontFamily: FONT_FAMILY,
+          fontSize: "7px",
+          color: css(C.paper),
+          wordWrap: { width: 300 },
+          lineSpacing: 3,
+        })
+        .setOrigin(0, 0.5);
     }
 
     new PixelButton(this, cx - 130, 372, "REINTENTAR", {

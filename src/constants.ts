@@ -18,6 +18,7 @@ export const Scenes = {
   Auth: "Auth",
   Menu: "Menu",
   Scores: "Scores",
+  Achievements: "Achievements",
   Game: "Game",
   Hud: "Hud",
   GameOver: "GameOver",
@@ -29,6 +30,8 @@ export const StoreKeys = {
   session: "dh:session",
   scores: "dh:scores",
   settings: "dh:settings",
+  achievements: "dh:achievements",
+  stats: "dh:stats",
 } as const;
 
 /** Core gameplay rules (Duck-Hunt-flavoured, tuned for feel). */
@@ -41,6 +44,10 @@ export const Rules = {
   duckBasePoints: 100,
   escapePenaltyLife: 1,
   hitstopMs: 55,
+  // combo decay: the meter empties over this window; it shrinks as the
+  // multiplier climbs so high combos take more discipline to hold.
+  comboWindowMs: 2800,
+  comboWindowMinMs: 1500,
 } as const;
 
 /** Power-up identifiers, shared by data + HUD + game logic. */

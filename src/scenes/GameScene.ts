@@ -17,6 +17,8 @@ import { Dog } from "../objects/Dog";
 import { LAST_LEVEL, LEVELS, PowerConfig, levelAt, unlockedPowers } from "../data/levels";
 import { currentUser, recordResult } from "../data/accounts";
 import { recordRun } from "../data/scores";
+import { DUCK_KINDS, pickDuckKind, type DuckKindId } from "../data/ducks";
+import { RunTracker } from "../data/achievements";
 
 interface PowerState {
   unlocked: boolean;
@@ -37,6 +39,8 @@ export interface HudSnapshot {
   reloading: boolean;
   multiplier: number;
   combo: number;
+  comboTimer: number; // ms left before the combo decays
+  comboWindow: number; // ms the meter takes to empty at the current multiplier
   powers: Record<PowerId, PowerState & { key: string; label: string; icon: string; durationMs: number; cooldownMs: number }>;
   now: number;
 }
@@ -54,14 +58,20 @@ export class GameScene extends Phaser.Scene {
   private magazine: number = Rules.baseMagazine;
   private combo = 0;
   private multiplier = 1;
+  private comboTimer = 0;
 
   private reloading = false;
   private clearing = false;
   private paused = false;
   private gameEnded = false;
 
+  private timeFactor = 1; // movement slow-down for hitstop / golden slow-mo
+  private hitstopUntil = 0;
+  private slowmo?: { ms: number; elapsed: number };
+
   private spawnEvent?: Phaser.Time.TimerEvent;
   private pauseLayer?: Phaser.GameObjects.Container;
+  private tracker!: RunTracker;
 
   private powers!: Record<PowerId, PowerState>;
 
@@ -71,6 +81,10 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.resetState();
+    this.tracker = new RunTracker((def) => {
+      Audio.achievement();
+      this.game.events.emit("dh:achievement", def);
+    });
     const lvl = levelAt(this.levelIndex);
 
     this.bg = new Parallax(this, lvl.timeOfDay);
@@ -106,12 +120,19 @@ export class GameScene extends Phaser.Scene {
 
     if (import.meta.env.DEV) {
       (window as unknown as { __dh: unknown }).__dh = {
-        ducks: () => this.aliveDucks().map((d) => ({ x: d.x, y: d.y })),
-        state: () => ({ score: this.score, lives: this.lives, level: this.levelIndex }),
+        ducks: () => this.aliveDucks().map((d) => ({ x: d.x, y: d.y, kind: d.kind.id })),
+        state: () => ({ score: this.score, lives: this.lives, level: this.levelIndex, combo: this.combo }),
         addScore: (n: number) => {
           this.score += n;
           this.maybeAdvanceLevel();
         },
+        spawn: (id: DuckKindId) => {
+          const d = new Duck(this, 120, DUCK_KINDS[id] ?? DUCK_KINDS.normal);
+          this.ducks.add(d);
+          d.once("escaped", () => this.onDuckEscaped(d));
+          d.once("bagged", () => this.onDuckBagged(d));
+        },
+        bagAll: () => this.aliveDucks().forEach((d) => this.bagDuck(d)),
         end: (win = false) => this.endGame(win),
       };
     }
@@ -125,10 +146,14 @@ export class GameScene extends Phaser.Scene {
     this.ammo = this.magazine;
     this.combo = 0;
     this.multiplier = 1;
+    this.comboTimer = 0;
     this.reloading = false;
     this.clearing = false;
     this.paused = false;
     this.gameEnded = false;
+    this.timeFactor = 1;
+    this.hitstopUntil = 0;
+    this.slowmo = undefined;
     const mk = (): PowerState => ({ unlocked: false, active: false, activeUntil: 0, cooldownUntil: 0 });
     this.powers = {
       [Power.Double]: mk(),
@@ -160,13 +185,21 @@ export class GameScene extends Phaser.Scene {
     if (alive >= lvl.maxAlive) return;
 
     const speed = Phaser.Math.Between(lvl.speed[0], lvl.speed[1]);
-    const duck = new Duck(this, speed);
+    const kind = pickDuckKind(this.levelIndex);
+    const duck = new Duck(this, speed, kind);
     this.ducks.add(duck);
 
     if (this.powers[Power.Freeze].active) duck.setSpeedMul(0.15);
 
     duck.once("escaped", () => this.onDuckEscaped(duck));
     duck.once("bagged", () => this.onDuckBagged(duck));
+
+    if (kind.id === "golden") {
+      Audio.golden();
+      this.game.events.emit("dh:banner-mini", "¡PATO DORADO!");
+    } else if (kind.id === "bomb") {
+      this.game.events.emit("dh:banner-mini", "¡BOMBA!");
+    }
 
     // spawn puff from the grass
     const puff = this.add.image(duck.x, GROUND_Y + 2, "puff").setDepth(18);
@@ -204,36 +237,87 @@ export class GameScene extends Phaser.Scene {
       .filter((d) => d.getBounds().contains(p.x, p.y))
       .sort((a, b) => b.bornAt - a.bornAt)[0];
 
-    if (target) this.bagDuck(target);
-    else this.onMiss();
+    if (target) {
+      const killed = target.hit();
+      if (killed) this.bagDuck(target);
+      else this.woundDuck(target);
+    } else {
+      this.onMiss();
+      this.tracker.missedShot();
+    }
 
+    if (this.ammo === 0) this.tracker.ranDry();
     if (this.ammo <= 0) this.reload();
     this.syncHud();
   }
 
   private bagDuck(duck: Duck): void {
-    duck.hit();
+    const kind = duck.kind;
+    duck.bag(); // force the kill (no-op if a shot already downed it)
+
     this.combo++;
     this.multiplier = Phaser.Math.Clamp(1 + Math.floor((this.combo - 1) / 2), 1, Rules.maxComboMultiplier);
+    this.comboTimer = this.comboWindow();
 
     const speedBonus = 1 + Phaser.Math.Clamp((duck.speed - 90) / 260, 0, 1.2);
     const doubleMul = this.powers[Power.Double].active ? 2 : 1;
-    const gained = Math.round(Rules.duckBasePoints * speedBonus * this.multiplier * doubleMul);
+    const gained = Math.round(Rules.duckBasePoints * speedBonus * this.multiplier * doubleMul * kind.pointsMul);
     this.score += gained;
 
+    this.tracker.bag(kind.id, this.combo, this.score);
+
     Audio.hit(this.multiplier);
-    this.hitstop();
+    if (kind.slowmoOnBag) this.startSlowmo(1400);
+    else this.hitstop();
     this.featherBurst(duck.x, duck.y);
     this.shockwave(duck.x, duck.y);
     this.scorePopup(duck.x, duck.y, gained, this.multiplier * doubleMul);
+
+    if (kind.explodeOnBag) this.bombExplode(duck);
+    if (kind.id === "golden") {
+      this.flash(C.gold, 0.4);
+      this.game.events.emit("dh:combo", this.multiplier * doubleMul);
+    }
 
     if (this.multiplier >= 2) this.game.events.emit("dh:combo", this.multiplier * doubleMul);
     this.maybeAdvanceLevel();
   }
 
+  /** Armored duck took a hit but is still flying — keep the combo alive, no score. */
+  private woundDuck(duck: Duck): void {
+    this.comboTimer = Math.max(this.comboTimer, this.comboWindow() * 0.6);
+    Audio.clank();
+    this.hitstop();
+    this.shockwave(duck.x, duck.y);
+    this.cameras.main.shake(60, 0.003);
+  }
+
+  private bombExplode(bomb: Duck): void {
+    const radius = 155;
+    Audio.explode();
+    this.flash(C.rust, 0.5);
+    this.cameras.main.shake(300, 0.012);
+    const ring = this.add.image(bomb.x, bomb.y, "ring").setDepth(45).setScale(0.3).setTint(C.rust);
+    this.tweens.add({ targets: ring, scale: 5.5, alpha: 0, duration: 420, onComplete: () => ring.destroy() });
+
+    this.aliveDucks().forEach((d) => {
+      if (d === bomb) return;
+      if (Phaser.Math.Distance.Between(d.x, d.y, bomb.x, bomb.y) <= radius) {
+        this.time.delayedCall(Phaser.Math.Between(20, 130), () => {
+          if (d.state === "alive") this.bagDuck(d);
+        });
+      }
+    });
+  }
+
+  private comboWindow(): number {
+    return Math.max(Rules.comboWindowMinMs, Rules.comboWindowMs - (this.multiplier - 1) * 400);
+  }
+
   private onMiss(): void {
     this.combo = 0;
     this.multiplier = 1;
+    this.comboTimer = 0;
     this.tweens.add({
       targets: this.crosshair,
       angle: { from: -12, to: 0 },
@@ -266,16 +350,26 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onDuckEscaped(duck: Duck): void {
+    const kind = duck.kind;
     duck.destroy();
     if (this.clearing || this.gameEnded) return;
 
     this.combo = 0;
     this.multiplier = 1;
-    this.lives--;
-    Audio.dogLaugh();
+    this.comboTimer = 0;
+    this.lives -= kind.escapePenalty;
+    this.tracker.lostLife();
+
+    if (kind.id === "bomb") {
+      Audio.explode();
+      this.flash(C.rust, 0.55);
+      this.cameras.main.shake(340, 0.015);
+    } else {
+      Audio.dogLaugh();
+      this.cameras.main.shake(220, 0.008);
+      this.flash(C.blood, 0.35);
+    }
     this.dog.laugh(Phaser.Math.Between(200, GAME_WIDTH - 200));
-    this.cameras.main.shake(220, 0.008);
-    this.flash(C.blood, 0.35);
     this.refillMagazine();
     this.syncHud();
 
@@ -296,6 +390,7 @@ export class GameScene extends Phaser.Scene {
     if (this.score < lvl.targetScore) return;
 
     this.clearing = true;
+    this.tracker.levelCleared();
     this.spawnEvent?.remove();
     this.aliveDucks().forEach((d) => d.panic());
 
@@ -315,6 +410,7 @@ export class GameScene extends Phaser.Scene {
       this.ammo = this.magazine;
       this.combo = 0;
       this.multiplier = 1;
+      this.comboTimer = 0;
 
       this.bg.destroy();
       this.bg = new Parallax(this, next.timeOfDay);
@@ -426,6 +522,7 @@ export class GameScene extends Phaser.Scene {
   private endGame(win: boolean): void {
     if (this.gameEnded) return;
     this.gameEnded = true;
+    this.tracker.gameEnded(win, this.levelIndex);
     this.spawnEvent?.remove();
     this.aliveDucks().forEach((d) => d.panic());
     this.input.setDefaultCursor("default");
@@ -439,9 +536,15 @@ export class GameScene extends Phaser.Scene {
     if (win) Audio.levelUp();
     else Audio.gameOver();
     this.cameras.main.fadeOut(500, 0, 0, 0);
+    const newAchievements = this.tracker.earned.map((a) => a.title);
     this.time.delayedCall(560, () => {
       this.scene.stop(Scenes.Hud);
-      this.scene.start(Scenes.GameOver, { score: this.score, level: this.levelIndex, win });
+      this.scene.start(Scenes.GameOver, {
+        score: this.score,
+        level: this.levelIndex,
+        win,
+        newAchievements,
+      });
     });
   }
 
@@ -505,12 +608,35 @@ export class GameScene extends Phaser.Scene {
   }
 
   private hitstop(): void {
-    this.time.timeScale = 0.35;
-    this.tweens.timeScale = 0.35;
-    this.time.delayedCall(Rules.hitstopMs, () => {
-      this.time.timeScale = 1;
+    if (this.slowmo) return; // don't interrupt a golden slow-mo
+    this.timeFactor = 0.3;
+    this.tweens.timeScale = 0.4;
+    this.hitstopUntil = this.time.now + Rules.hitstopMs;
+  }
+
+  /** Smooth ramp from slow to normal speed, used when a golden duck is bagged. */
+  private startSlowmo(ms: number): void {
+    this.slowmo = { ms, elapsed: 0 };
+    this.hitstopUntil = 0;
+  }
+
+  private updateTimeDistortion(deltaMs: number): void {
+    if (this.slowmo) {
+      this.slowmo.elapsed += deltaMs;
+      const k = Phaser.Math.Clamp(this.slowmo.elapsed / this.slowmo.ms, 0, 1);
+      const v = 0.35 + 0.65 * (k * k);
+      this.timeFactor = v;
+      this.tweens.timeScale = v;
+      if (k >= 1) {
+        this.slowmo = undefined;
+        this.timeFactor = 1;
+        this.tweens.timeScale = 1;
+      }
+    } else if (this.hitstopUntil && this.time.now >= this.hitstopUntil) {
+      this.hitstopUntil = 0;
+      this.timeFactor = 1;
       this.tweens.timeScale = 1;
-    });
+    }
   }
 
   private flash(color: number, alpha: number): void {
@@ -543,6 +669,8 @@ export class GameScene extends Phaser.Scene {
       reloading: this.reloading,
       multiplier: this.multiplier * (this.powers[Power.Double].active ? 2 : 1),
       combo: this.combo,
+      comboTimer: Math.max(0, this.comboTimer),
+      comboWindow: this.comboWindow(),
       powers,
       now: this.time.now,
     };
@@ -554,17 +682,34 @@ export class GameScene extends Phaser.Scene {
       this.bg?.update(time, delta);
       return;
     }
-    this.bg.update(time, delta);
+
+    this.updateTimeDistortion(delta);
+    const scaled = delta * this.timeFactor;
+
+    this.bg.update(time, scaled);
     this.tickPowers();
 
     (this.ducks.getChildren() as Duck[]).forEach((d) => {
       if (d.state === "done") return;
-      d.tick(time, delta);
+      d.tick(time, scaled);
     });
 
     // keep the freeze slow-mo applied to ducks that spawned mid-effect
     if (this.powers[Power.Freeze].active) {
       this.aliveDucks().forEach((d) => d.setSpeedMul(0.15));
+    }
+
+    // combo meter drains when you stop bagging ducks
+    if (this.combo > 0) {
+      this.comboTimer -= delta;
+      if (this.comboTimer <= 0) {
+        if (this.multiplier >= 2) {
+          Audio.comboLost();
+          this.game.events.emit("dh:combo-lost");
+        }
+        this.combo = 0;
+        this.multiplier = 1;
+      }
     }
 
     this.syncHud();

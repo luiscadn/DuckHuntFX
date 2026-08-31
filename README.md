@@ -41,8 +41,25 @@ npm run preview  # sirve el build local para revisarlo
   - Nivel 2 → **Doble** (puntos x2 unos segundos)
   - Nivel 3 → **Freeze** (los patos casi se detienen)
   - Nivel 4 → **Bomba** (embolsa todos los patos en pantalla)
-- Aciertos seguidos suben el **multiplicador de combo** hasta x4. Fallar lo reinicia.
 - 5 niveles (amanecer → mediodía → atardecer → ocaso → noche). Al superarlos todos: victoria.
+
+### Tipos de pato
+
+| Tipo | Rasgos |
+|---|---|
+| Normal | El pato base. |
+| Rápido (azul) | Pequeño y errático, más puntos. |
+| Blindado (gris) | Aguanta 2 disparos. |
+| Dorado | Raro. Vale x10 y activa cámara lenta al cazarlo. |
+| Bomba (rojo) | Al dispararle revienta a los patos cercanos; si escapa, quita 2 vidas. |
+
+### Combo y logros
+
+- Aciertos seguidos suben el **multiplicador** hasta x4. El **medidor de combo se
+  vacía con el tiempo**: hay que seguir cazando para no perderlo (y la ventana se
+  acorta a multiplicadores altos).
+- **15 logros** (`src/data/achievements.ts`) que se guardan en `localStorage` y se
+  ven desde el menú → **LOGROS**. Se notifican con un aviso durante la partida.
 
 ## Cuentas y puntajes
 
@@ -58,13 +75,13 @@ src/
 ├── constants.ts         dimensiones, reglas de juego, claves
 ├── art/                 paleta única + generador de texturas procedurales
 ├── audio/AudioBus.ts    sintetizador de SFX y música chiptune
-├── data/                niveles, cuentas y puntajes (localStorage)
-├── objects/             Duck (IA de vuelo) y Dog
+├── data/                niveles, tipos de pato, cuentas, puntajes y logros
+├── objects/             Duck (IA de vuelo + tipos) y Dog
 ├── ui/                  Parallax (fondo por capas), PixelButton, estilos DOM
-└── scenes/              Boot → Auth → Menu → Scores → Game (+ Hud) → GameOver
+└── scenes/              Boot → Auth → Menu → Scores/Achievements → Game (+ Hud) → GameOver
 ```
 
 ## El proyecto JavaFX original
 
-La versión anterior en JavaFX vive en el historial de git (antes de este commit).
-Para verla: `git log --oneline` y `git checkout <commit-anterior>`.
+La versión anterior en JavaFX vive en el historial de git (antes del commit del
+remake). Para verla: `git log --oneline` y `git checkout <commit-anterior>`.

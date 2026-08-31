@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { FONT_FAMILY, GAME_WIDTH, Power, Scenes, type PowerId } from "../constants";
 import { Palette as C, css } from "../art/palette";
+import type { AchievementDef } from "../data/achievements";
 import type { HudSnapshot } from "./GameScene";
 
 const POWER_ORDER: PowerId[] = [Power.Double, Power.Freeze, Power.Clear];
@@ -15,9 +16,14 @@ export class HudScene extends Phaser.Scene {
   private reloadText!: Phaser.GameObjects.Text;
   private multText!: Phaser.GameObjects.Text;
   private barFill!: Phaser.GameObjects.Rectangle;
+  private comboBar!: Phaser.GameObjects.Rectangle;
+  private comboBarBg!: Phaser.GameObjects.Rectangle;
   private banner!: Phaser.GameObjects.Container;
   private bannerBig!: Phaser.GameObjects.Text;
   private bannerSmall!: Phaser.GameObjects.Text;
+
+  private toastQueue: AchievementDef[] = [];
+  private toastBusy = false;
 
   private powerSlots: Array<{
     root: Phaser.GameObjects.Container;
@@ -37,6 +43,8 @@ export class HudScene extends Phaser.Scene {
     this.bullets = [];
     this.bulletMag = 0;
     this.powerSlots = [];
+    this.toastQueue = [];
+    this.toastBusy = false;
 
     // hearts
     for (let i = 0; i < 4; i++) {
@@ -59,10 +67,18 @@ export class HudScene extends Phaser.Scene {
       .setOrigin(1, 0.5)
       .setVisible(false);
 
-    // multiplier
+    // multiplier + combo meter
     this.multText = this.add
       .text(GAME_WIDTH - 30, 150, "", { fontFamily: FONT_FAMILY, fontSize: "22px", color: css(C.gold), stroke: css(C.ink), strokeThickness: 5 })
       .setOrigin(1, 0.5);
+    this.comboBarBg = this.add
+      .rectangle(GAME_WIDTH - 30, 172, 96, 8, C.ink, 0.5)
+      .setOrigin(1, 0.5)
+      .setVisible(false);
+    this.comboBar = this.add
+      .rectangle(GAME_WIDTH - 32, 172, 92, 5, C.gold)
+      .setOrigin(1, 0.5)
+      .setVisible(false);
 
     // power slots (bottom-right)
     POWER_ORDER.forEach((id, i) => {
@@ -92,10 +108,56 @@ export class HudScene extends Phaser.Scene {
     this.game.events.on("dh:banner", this.showBanner, this);
     this.game.events.on("dh:banner-mini", this.showMiniBanner, this);
     this.game.events.on("dh:combo", this.pingCombo, this);
+    this.game.events.on("dh:achievement", this.queueToast, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.game.events.off("dh:banner", this.showBanner, this);
       this.game.events.off("dh:banner-mini", this.showMiniBanner, this);
       this.game.events.off("dh:combo", this.pingCombo, this);
+      this.game.events.off("dh:achievement", this.queueToast, this);
+    });
+  }
+
+  private queueToast(def: AchievementDef): void {
+    this.toastQueue.push(def);
+    if (!this.toastBusy) this.pumpToast();
+  }
+
+  private pumpToast(): void {
+    const def = this.toastQueue.shift();
+    if (!def) {
+      this.toastBusy = false;
+      return;
+    }
+    this.toastBusy = true;
+
+    const w = 260;
+    const startX = GAME_WIDTH + w;
+    const restX = GAME_WIDTH - w / 2 - 16;
+    const y = 118;
+
+    const card = this.add.container(startX, y).setDepth(500);
+    card.add(this.add.rectangle(0, 0, w, 54, C.ink, 0.92).setStrokeStyle(3, C.gold));
+    card.add(this.add.image(-w / 2 + 28, 0, "medal").setScale(1));
+    card.add(
+      this.add
+        .text(-w / 2 + 54, -13, "LOGRO", { fontFamily: FONT_FAMILY, fontSize: "8px", color: css(C.gold) }),
+    );
+    card.add(
+      this.add
+        .text(-w / 2 + 54, 1, def.title, { fontFamily: FONT_FAMILY, fontSize: "11px", color: css(C.paper) }),
+    );
+
+    this.tweens.chain({
+      targets: card,
+      tweens: [
+        { x: restX, duration: 260, ease: "back.out" },
+        { x: restX, duration: 1800 },
+        { x: startX, duration: 240, ease: "quad.in" },
+      ],
+      onComplete: () => {
+        card.destroy();
+        this.pumpToast();
+      },
     });
   }
 
@@ -170,8 +232,16 @@ export class HudScene extends Phaser.Scene {
     }
     this.reloadText.setVisible(s.reloading && Math.floor(s.now / 200) % 2 === 0);
 
-    // multiplier
+    // multiplier + combo decay meter
     this.multText.setText(s.multiplier > 1 ? `x${s.multiplier}` : "");
+    const showCombo = s.combo >= 2;
+    this.comboBarBg.setVisible(showCombo);
+    this.comboBar.setVisible(showCombo);
+    if (showCombo) {
+      const frac = Phaser.Math.Clamp(s.comboTimer / Math.max(1, s.comboWindow), 0, 1);
+      this.comboBar.width = 92 * frac;
+      this.comboBar.setFillStyle(frac < 0.25 ? C.blood : frac < 0.5 ? C.goldDeep : C.gold);
+    }
 
     // powers
     POWER_ORDER.forEach((id, i) => {
