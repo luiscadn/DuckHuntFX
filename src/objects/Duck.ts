@@ -31,6 +31,9 @@ export class Duck extends Phaser.GameObjects.Sprite {
   private speedMul = 1; // Freeze power
   private sparkleAcc = 0;
   private pulseTween?: Phaser.Tweens.Tween;
+  private lastDir = 1;
+  /** cast shadow on the ground — the main "2.5D" depth cue */
+  private readonly shadow: Phaser.GameObjects.Image;
 
   constructor(scene: Phaser.Scene, speed: number, kind: DuckKind = DUCK_KINDS.normal) {
     const x = Phaser.Math.Between(80, GAME_WIDTH - 80);
@@ -40,12 +43,14 @@ export class Duck extends Phaser.GameObjects.Sprite {
 
     this.kind = kind;
     this.hp = kind.hp;
-    this.baseScale = kind.scale;
+    this.baseScale = kind.scale * 1.12; // a bit chunkier so the shading reads
     this.speed = speed * kind.speedMul;
     this.bornAt = scene.time.now;
     this.setDepth(20);
-    this.setScale(kind.scale);
+    this.setScale(this.baseScale);
     this.setTint(kind.tint);
+
+    this.shadow = scene.add.image(x, GROUND_Y + 12, "duck-shadow").setDepth(14).setOrigin(0.5);
 
     const dir = Math.random() < 0.5 ? -1 : 1;
     this.vx = dir * this.speed * Phaser.Math.FloatBetween(0.45, 0.8);
@@ -111,6 +116,28 @@ export class Duck extends Phaser.GameObjects.Sprite {
     this.vx *= 0.4;
   }
 
+  /** scale + fade the ground shadow by how high the duck is flying */
+  private updateShadow(): void {
+    if (!this.shadow.active) return;
+    const h = Phaser.Math.Clamp((GROUND_Y - this.y) / 300, 0, 1);
+    this.shadow.x = this.x;
+    this.shadow.setScale((1.35 - h * 0.95) * this.baseScale, (0.95 - h * 0.6) * this.baseScale);
+    this.shadow.setAlpha(0.5 - h * 0.42);
+  }
+
+  /** a quick perspective squash when the duck banks into a turn */
+  private bank(dir: number): void {
+    if (dir === this.lastDir || this.kind.pulse) return;
+    this.lastDir = dir;
+    this.scene.tweens.add({
+      targets: this,
+      scaleX: this.baseScale * 0.5,
+      duration: 130,
+      yoyo: true,
+      ease: "sine.inOut",
+    });
+  }
+
   tick(_time: number, deltaMs: number): void {
     const dt = (deltaMs / 1000) * this.speedMul;
 
@@ -119,6 +146,7 @@ export class Duck extends Phaser.GameObjects.Sprite {
       this.x += this.vx * dt;
       this.y = this.baseY + Math.sin(this.scene.time.now / 260 + this.weavePhase) * 5;
       this.rotation = Math.sin(this.scene.time.now / 320 + this.weavePhase) * 0.12;
+      this.updateShadow();
       if (this.x < -50 || this.x > GAME_WIDTH + 50) {
         this.state = "done";
         this.emit("escaped", this);
@@ -140,9 +168,13 @@ export class Duck extends Phaser.GameObjects.Sprite {
 
       if (this.x < 46 && this.vx < 0) this.vx = Math.abs(this.vx);
       if (this.x > GAME_WIDTH - 46 && this.vx > 0) this.vx = -Math.abs(this.vx);
-      this.setFlipX(this.vx + weave < 0);
-      this.rotation = Phaser.Math.Clamp(this.vy / this.speed, -1, 0.2) * 0.18;
+      const dir = this.vx + weave < 0 ? -1 : 1;
+      this.setFlipX(dir < 0);
+      this.bank(dir);
+      this.rotation =
+        Phaser.Math.Clamp(this.vy / this.speed, -1, 0.2) * 0.18 + Math.sin(this.weavePhase) * 0.05;
 
+      this.updateShadow();
       if (this.kind.sparkle) this.emitSparkle(deltaMs);
 
       if (this.y < -60) {
@@ -154,12 +186,18 @@ export class Duck extends Phaser.GameObjects.Sprite {
       this.y += this.vy * dt;
       this.vy += 900 * dt;
       this.rotation += dt * 9;
+      this.updateShadow();
       if (this.y >= GROUND_Y + 6) {
         this.state = "done";
         this.landSplash();
         this.emit("bagged", this);
       }
     }
+  }
+
+  destroy(fromScene?: boolean): void {
+    this.shadow?.destroy();
+    super.destroy(fromScene);
   }
 
   private emitSparkle(deltaMs: number): void {

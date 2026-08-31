@@ -31,41 +31,45 @@ type TM = Phaser.Textures.TextureManager;
 const DUCK_W = 64;
 const DUCK_H = 48;
 
+// Two clean tones + a highlight = readable volume at this small size.
+// Light from the top-left; belly and tail undersides sit in shadow.
 function drawDuckBody(ctx: CanvasRenderingContext2D): void {
   // tail
   fillPoly(ctx, [[16, 22], [3, 17], [17, 31]], C.duckBody);
+  fillPoly(ctx, [[16, 27], [5, 20], [17, 31]], C.duckBodyShade);
   fillPoly(ctx, [[3, 17], [11, 20], [6, 25]], C.duckWing);
-  // body
+  // body: light top, shaded belly, dark sliver, highlight
   ellipse(ctx, 30, 27, 15, 10, C.duckBody);
-  ellipse(ctx, 28, 32, 12, 6, C.duckBodyShade);
-  ctx.globalAlpha = 0.25;
-  ellipse(ctx, 27, 21, 10, 4, 0xffffff);
-  ctx.globalAlpha = 1;
+  ellipse(ctx, 30, 31, 14, 6, C.duckBodyShade);
+  ellipse(ctx, 30, 35, 9, 2.4, C.duckCore);
+  ellipse(ctx, 25, 22, 6, 3.4, C.duckLit);
   // neck + head
   fillPoly(ctx, [[34, 21], [41, 9], [46, 16], [39, 27]], C.duckHead);
+  fillPoly(ctx, [[36, 25], [42, 14], [45, 17], [39, 27]], C.duckHeadShade);
   ellipse(ctx, 46, 15, 8, 7, C.duckHead);
-  ellipse(ctx, 46, 18, 7, 4, C.duckHeadShade);
+  ellipse(ctx, 47, 18, 6.5, 4, C.duckHeadShade);
+  ellipse(ctx, 43.6, 12.4, 2.6, 2, C.duckHeadLit);
   // white collar
-  line(ctx, 39, 21, 45, 24, C.duckBody, 3);
+  line(ctx, 39, 21, 45, 24, C.duckBody, 2.6);
   // eye
-  circle(ctx, 49, 13, 1.7, C.duckEye);
-  circle(ctx, 49.6, 12.4, 0.7, C.paper);
+  circle(ctx, 49, 13, 1.8, C.duckEye);
+  circle(ctx, 49.7, 12.4, 0.7, 0xffffff);
   // beak
-  fillPoly(ctx, [[53, 13], [63, 14], [63, 19], [53, 20]], C.duckBeak);
-  fillPoly(ctx, [[53, 18], [63, 19], [63, 21], [53, 20]], C.duckBeakShade);
-  line(ctx, 55, 16.5, 62, 16.5, C.duckBeakShade, 1);
+  fillPoly(ctx, [[52, 13], [63, 14], [63, 17.5], [52, 18]], C.duckBeakLit);
+  fillPoly(ctx, [[52, 18], [63, 17.5], [63, 20.5], [52, 20]], C.duckBeak);
+  line(ctx, 53, 18.5, 62, 18.2, C.duckBeakShade, 1);
 }
 
 function drawDuckWing(ctx: CanvasRenderingContext2D, phase: "up" | "mid" | "down"): void {
   if (phase === "up") {
     fillPoly(ctx, [[28, 20], [19, 3], [35, 6], [37, 21]], C.duckWing);
-    fillPoly(ctx, [[19, 3], [26, 6], [24, 11]], C.duckBodyShade);
+    fillPoly(ctx, [[28, 20], [22, 8], [31, 10], [33, 19]], C.duckWingLit);
   } else if (phase === "mid") {
     fillPoly(ctx, [[27, 22], [5, 15], [10, 27], [29, 29]], C.duckWing);
-    fillPoly(ctx, [[5, 15], [13, 18], [11, 23]], C.duckBodyShade);
+    fillPoly(ctx, [[26, 23], [10, 18], [12, 22], [26, 26]], C.duckWingLit);
   } else {
     fillPoly(ctx, [[28, 30], [21, 45], [37, 43], [37, 30]], C.duckWing);
-    fillPoly(ctx, [[21, 45], [28, 43], [26, 38]], C.duckBodyShade);
+    fillPoly(ctx, [[28, 30], [25, 39], [33, 38], [35, 31]], C.duckWingLit);
   }
 }
 
@@ -81,7 +85,9 @@ function buildDuck(tm: TM): void {
   drawDuckBody(ctx);
   // both wings flung up
   fillPoly(ctx, [[28, 20], [19, 3], [35, 6], [37, 21]], C.duckWing);
+  fillPoly(ctx, [[28, 20], [21, 6], [33, 8], [34, 19]], C.duckWingLit);
   fillPoly(ctx, [[30, 22], [40, 6], [48, 12], [40, 26]], C.duckWing);
+  fillPoly(ctx, [[31, 22], [39, 9], [45, 13], [39, 24]], C.duckWingLit);
   // X eye
   line(ctx, 47, 11, 51, 15, C.duckEye, 1.6);
   line(ctx, 51, 11, 47, 15, C.duckEye, 1.6);
@@ -513,18 +519,31 @@ function buildBoss(tm: TM): void {
 }
 
 function buildExtras(tm: TM): void {
-  // rubber decoy duck — do not shoot
+  // soft ground shadow that scales with a duck's height
+  {
+    const s = surface(48, 18);
+    const g = s.ctx.createRadialGradient(24, 9, 2, 24, 9, 22);
+    g.addColorStop(0, "rgba(12,16,32,0.5)");
+    g.addColorStop(1, "rgba(12,16,32,0)");
+    s.ctx.fillStyle = g;
+    s.ctx.fillRect(0, 0, 48, 18);
+    register(tm, "duck-shadow", s);
+  }
+  // rubber decoy duck — glossy toy, do not shoot
   {
     const s = surface(32, 26);
     const ctx = s.ctx;
-    ellipse(ctx, 14, 17, 12, 8, 0xffd23f);
-    ellipse(ctx, 14, 20, 9, 4, 0xe0a92a);
-    ellipse(ctx, 20, 10, 6, 5, 0xffd23f); // head
-    fillPoly(ctx, [[24, 9], [31, 10], [31, 14], [24, 14]], 0xf28c1e); // bill
-    circle(ctx, 21, 9, 1.5, C.ink);
-    ctx.globalAlpha = 0.5;
-    ellipse(ctx, 11, 13, 5, 2, 0xffffff);
-    ctx.globalAlpha = 1;
+    ellipse(ctx, 14, 18, 12.5, 8.5, 0xd99416); // rim
+    ellipse(ctx, 14, 17, 12, 8, 0xffcf3a); // base
+    ellipse(ctx, 15, 20, 9, 5, 0xe0a220); // form shadow
+    ellipse(ctx, 10, 14, 5, 3, 0xfff0b0); // highlight
+    circle(ctx, 8, 12, 1.6, 0xffffff); // specular
+    ellipse(ctx, 21, 10, 6, 5, 0xffcf3a); // head
+    ellipse(ctx, 20, 11.5, 5, 3.2, 0xe0a220);
+    ellipse(ctx, 19.5, 8.5, 2.6, 1.8, 0xfff0b0);
+    fillPoly(ctx, [[24, 8], [31, 9], [31, 12], [24, 13]], 0xf9a83a); // bill top
+    fillPoly(ctx, [[24, 13], [31, 12], [31, 15], [24, 15]], 0xd97e18); // bill bottom
+    circle(ctx, 21.5, 9, 1.4, C.ink);
     register(tm, "duck-decoy", s);
   }
   // coin (loot)
@@ -621,6 +640,108 @@ function buildExtras(tm: TM): void {
   }
 }
 
+// ── first-person weapon viewmodels ────────────────────────────────
+// Side profile, held bottom-right, barrel pointing up-left toward the action.
+
+const GUN_W = 210;
+const GUN_H = 150;
+
+/** thin lit edge along the top of a metal part */
+function metalBar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+  rect(ctx, x, y, w, h, C.gunMetal);
+  rect(ctx, x, y, w, Math.max(2, h * 0.28), C.gunMetalLit);
+  rect(ctx, x, y + h - Math.max(2, h * 0.24), w, Math.max(2, h * 0.24), C.gunMetalDark);
+}
+
+function buildGuns(tm: TM): void {
+  // pistol
+  {
+    const s = surface(GUN_W, GUN_H);
+    const ctx = s.ctx;
+    // grip
+    fillPoly(ctx, [[150, 96], [186, 120], [176, 150], [136, 150], [128, 108]], C.gunMetalDark);
+    fillPoly(ctx, [[150, 96], [182, 116], [174, 144], [140, 144]], C.gunMetal);
+    fillPoly(ctx, [[150, 96], [168, 106], [160, 128], [146, 118]], C.gunMetalLit);
+    // frame / slide
+    metalBar(ctx, 78, 80, 84, 26);
+    // trigger guard
+    ctx.strokeStyle = "#2b2d34";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(132, 118, 12, Math.PI * 0.15, Math.PI * 1.1);
+    ctx.stroke();
+    // barrel
+    fillPoly(ctx, [[92, 82], [40, 46], [34, 56], [86, 96]], C.gunMetal);
+    fillPoly(ctx, [[92, 82], [40, 46], [37, 51], [88, 88]], C.gunMetalLit);
+    circle(ctx, 37, 51, 4, C.gunMetalDark);
+    register(tm, "gun-pistol", s);
+  }
+  // shotgun
+  {
+    const s = surface(GUN_W, GUN_H);
+    const ctx = s.ctx;
+    // wooden stock
+    fillPoly(ctx, [[150, 86], [210, 118], [210, 150], [140, 150], [130, 104]], C.gunWoodLit);
+    fillPoly(ctx, [[150, 92], [204, 120], [204, 146], [146, 146]], C.gunWood);
+    // receiver
+    metalBar(ctx, 92, 78, 68, 30);
+    // pump forend (grooved wood)
+    fillPoly(ctx, [[58, 72], [96, 92], [90, 108], [50, 88]], C.gunWood);
+    for (let i = 0; i < 4; i++) line(ctx, 58 + i * 8, 78 + i * 4, 66 + i * 8, 96 + i * 4, C.gunWoodLit, 2);
+    // barrel + magazine tube
+    fillPoly(ctx, [[100, 74], [22, 20], [16, 30], [94, 88]], C.gunMetal);
+    fillPoly(ctx, [[100, 74], [22, 20], [19, 25], [96, 82]], C.gunMetalLit);
+    fillPoly(ctx, [[96, 90], [30, 40], [26, 48], [92, 100]], C.gunMetalDark);
+    circle(ctx, 19, 25, 5, C.gunMetalDark);
+    circle(ctx, 19, 25, 2.4, C.ink);
+    register(tm, "gun-shotgun", s);
+  }
+  // rifle
+  {
+    const s = surface(GUN_W, GUN_H);
+    const ctx = s.ctx;
+    fillPoly(ctx, [[150, 90], [210, 116], [210, 150], [138, 150], [128, 106]], C.gunWood);
+    fillPoly(ctx, [[150, 90], [206, 114], [190, 118], [150, 102]], C.gunWoodLit);
+    metalBar(ctx, 96, 82, 60, 22);
+    // bolt handle
+    fillPoly(ctx, [[150, 92], [166, 82], [172, 88], [156, 100]], C.gunMetalLit);
+    // long thin barrel
+    fillPoly(ctx, [[104, 84], [14, 30], [10, 37], [100, 92]], C.gunMetal);
+    fillPoly(ctx, [[104, 84], [14, 30], [12, 33], [102, 88]], C.gunMetalLit);
+    // scope
+    metalBar(ctx, 100, 60, 44, 14);
+    circle(ctx, 100, 67, 8, C.gunMetalDark);
+    circle(ctx, 100, 67, 5, 0x2a3a4a);
+    circle(ctx, 144, 67, 7, C.gunMetalDark);
+    line(ctx, 108, 74, 116, 82, C.gunMetalDark, 4);
+    line(ctx, 132, 74, 138, 82, C.gunMetalDark, 4);
+    circle(ctx, 12, 33, 3.6, C.gunMetalDark);
+    register(tm, "gun-rifle", s);
+  }
+  // smg
+  {
+    const s = surface(GUN_W, GUN_H);
+    const ctx = s.ctx;
+    // folding stock
+    fillPoly(ctx, [[168, 84], [206, 92], [206, 100], [170, 96]], C.gunMetalDark);
+    fillPoly(ctx, [[200, 96], [206, 96], [206, 132], [200, 132]], C.gunMetalDark);
+    // boxy receiver
+    metalBar(ctx, 96, 74, 78, 34);
+    // pistol grip
+    fillPoly(ctx, [[150, 104], [172, 122], [164, 148], [140, 148], [136, 112]], C.gunMetalDark);
+    fillPoly(ctx, [[150, 104], [166, 116], [160, 138], [144, 128]], C.gunMetal);
+    // curved magazine
+    fillPoly(ctx, [[108, 106], [126, 108], [138, 150], [116, 150]], C.gunMetalDark);
+    fillPoly(ctx, [[110, 108], [122, 110], [132, 146], [120, 146]], C.gunMetal);
+    // short shrouded barrel
+    fillPoly(ctx, [[104, 76], [46, 40], [40, 50], [98, 90]], C.gunMetal);
+    fillPoly(ctx, [[104, 76], [46, 40], [43, 45], [100, 82]], C.gunMetalLit);
+    for (let i = 0; i < 5; i++) circle(ctx, 92 - i * 10, 82 - i * 6, 2, C.gunMetalDark);
+    circle(ctx, 43, 45, 4, C.gunMetalDark);
+    register(tm, "gun-smg", s);
+  }
+}
+
 /** Entry point — call once from BootScene. */
 export function generateAllTextures(tm: TM): void {
   buildDuck(tm);
@@ -632,6 +753,7 @@ export function generateAllTextures(tm: TM): void {
   buildPowerIcons(tm);
   buildBadges(tm);
   buildExtras(tm);
+  buildGuns(tm);
 }
 
 export const DuckFrame = { W: DUCK_W, H: DUCK_H };

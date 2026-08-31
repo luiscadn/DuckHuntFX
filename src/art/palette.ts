@@ -39,16 +39,29 @@ export const Palette = {
   grassDark: 0x4f8a35,
   reed: 0x3f6d2c,
   water: 0x4fb4d8,
-  // ── duck ─────────────────────────────────────────────────────────
-  duckBody: 0xf2f0e4,
-  duckBodyShade: 0xc9c6b4,
+  // ── duck (2-tone volume: key light from top-left) ────────────────
+  duckBody: 0xf1efe2,
+  duckLit: 0xffffff, // top-left highlight pixel
+  duckBodyShade: 0xa9a48d, // belly / underside
+  duckCore: 0x827d69, // deepest shadow sliver
+  duckRim: 0xfff6d8,
   duckWing: 0x2e2b3d,
+  duckWingLit: 0x585470,
   duckHead: 0x1f7a3f,
-  duckHeadShade: 0x145c2c,
+  duckHeadLit: 0x37ab5b,
+  duckHeadShade: 0x104a25,
   duckBeak: 0xf2a416,
-  duckBeakShade: 0xc47c0c,
+  duckBeakLit: 0xffc24a,
+  duckBeakShade: 0xa9660a,
   duckDead: 0xe4b9b0,
   duckEye: 0x161327,
+  // ── first-person weapon viewmodel ───────────────────────────────
+  gunMetal: 0x4a4e57,
+  gunMetalLit: 0x767b86,
+  gunMetalDark: 0x2b2d34,
+  gunWood: 0x7a4a26,
+  gunWoodLit: 0x9c6636,
+  gunAccent: 0xd7b249,
   // ── crocodile (the marsh retriever) ──────────────────────────────
   crocBody: 0x4f7d3f,
   crocShade: 0x365a2b,

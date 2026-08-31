@@ -79,6 +79,13 @@ export class GameScene extends Phaser.Scene {
   private ducks!: Phaser.GameObjects.Group;
   private boss?: BossDuck;
 
+  private gunView!: Phaser.GameObjects.Container;
+  private gunImg!: Phaser.GameObjects.Image;
+  private gunMuzzle!: Phaser.GameObjects.Image;
+  private gunBaseX = 0;
+  private gunBaseY = 0;
+  private recoilTween?: Phaser.Tweens.Tween | Phaser.Tweens.TweenChain;
+
   private diff!: DifficultyMods;
   private weapon!: Weapon;
 
@@ -164,6 +171,7 @@ export class GameScene extends Phaser.Scene {
     this.input.setDefaultCursor("none");
 
     this.buildInteractiveScenery();
+    this.buildGunView();
 
     this.scene.launch(Scenes.Hud);
     Audio.setBossMode(false);
@@ -338,6 +346,53 @@ export class GameScene extends Phaser.Scene {
     return duck;
   }
 
+  /** first-person view of the equipped weapon, bottom-right, barrel toward the action */
+  private buildGunView(): void {
+    this.gunBaseX = GAME_WIDTH - 118;
+    this.gunBaseY = GAME_HEIGHT + 24;
+    const key = `gun-${this.weapon.id}`;
+    this.gunImg = this.add
+      .image(0, 0, this.textures.exists(key) ? key : "gun-pistol")
+      .setOrigin(0.5, 1)
+      .setAngle(-14)
+      .setScale(0.86);
+    this.gunMuzzle = this.add.image(-86, -122, "muzzle").setScale(0.35).setVisible(false);
+    this.gunView = this.add
+      .container(this.gunBaseX, this.gunBaseY, [this.gunImg, this.gunMuzzle])
+      .setDepth(97)
+      .setAlpha(0.97);
+  }
+
+  private setGunTexture(): void {
+    const key = `gun-${this.weapon.id}`;
+    if (this.textures.exists(key)) this.gunImg.setTexture(key);
+  }
+
+  private gunRecoil(): void {
+    this.recoilTween?.stop();
+    this.gunImg.setAngle(-14).setPosition(0, 0);
+    this.gunMuzzle.setVisible(true).setScale(0.3).setAlpha(1);
+    this.tweens.add({ targets: this.gunMuzzle, scale: 0.9, alpha: 0, duration: 120 });
+    this.recoilTween = this.tweens.chain({
+      targets: this.gunImg,
+      tweens: [
+        { x: 10, y: -20, angle: -30, duration: 45, ease: "quad.out" },
+        { x: 0, y: 0, angle: -14, duration: 170, ease: "quad.out" },
+      ],
+    });
+  }
+
+  private gunReloadPose(down: boolean): void {
+    this.recoilTween?.stop();
+    this.tweens.add({
+      targets: this.gunImg,
+      y: down ? 34 : 0,
+      angle: down ? 10 : -14,
+      duration: 220,
+      ease: "quad.out",
+    });
+  }
+
   private buildInteractiveScenery(): void {
     this.bushes = [];
     this.clouds = [];
@@ -388,6 +443,7 @@ export class GameScene extends Phaser.Scene {
     this.shotsFired++;
     this.fireSound();
     this.muzzleFlash(p.x, p.y);
+    this.gunRecoil();
     this.doShake(90, this.weapon.shake);
 
     const wob = this.weapon.wobble;
@@ -797,10 +853,12 @@ export class GameScene extends Phaser.Scene {
     if (this.reloading || this.ammo >= this.magazine || this.gameEnded) return;
     this.reloading = true;
     Audio.reload();
+    this.gunReloadPose(true);
     this.syncHud();
     this.time.delayedCall(this.weapon.reloadMs * this.reloadMul, () => {
       this.reloading = false;
       this.ammo = this.magazine;
+      this.gunReloadPose(false);
       this.syncHud();
     });
   }
@@ -1055,6 +1113,7 @@ export class GameScene extends Phaser.Scene {
           this.weapon = WEAPONS[wid];
           this.magazine = this.currentMagazine();
           this.ammo = this.magazine;
+          this.setGunTexture();
         }
     }
     this.syncHud();
@@ -1352,6 +1411,12 @@ export class GameScene extends Phaser.Scene {
       c.x -= 8 * (scaled / 1000);
       if (c.x < -c.displayWidth) c.x = GAME_WIDTH + c.displayWidth * 0.5;
     }
+
+    // weapon viewmodel idle sway
+    this.gunView.setPosition(
+      this.gunBaseX + Math.sin(time / 620) * 3,
+      this.gunBaseY + Math.sin(time / 430) * 5,
+    );
 
     this.syncHud();
   }
