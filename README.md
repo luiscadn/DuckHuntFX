@@ -92,8 +92,8 @@ src/
 
 1. Clonar el repositorio:
    ```bash
-   git clone https://github.com/luiscadn/DuckHuntFX.git
-   cd DuckHuntFX
+   git clone https://github.com/luiscadn/SalpiconGame.git
+   cd SalpiconGame
    ```
 
 2. Instalar las dependencias del proyecto:
